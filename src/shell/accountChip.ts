@@ -3,12 +3,19 @@ import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import St from 'gi://St';
-import {chooseWindow, displayLabel, displayPercent, pressureClass} from '../core/display.js';
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import {balanceLabel, chooseWindow, displayLabel, displayPercent, pressureClass} from '../core/display.js';
 import {formatResetCountdown} from '../core/timeMath.js';
 import {providerIconFile} from '../core/providerMetadata.js';
 import {accentColor} from '../core/accent.js';
 
 export {accentColor};
+
+export function schemeAppearance() {
+    // Follow the effective Shell theme, including its dark default and forced
+    // session-mode themes, rather than interpreting the desktop preference.
+    return Main.getStyleVariant() === 'light' ? 'dark' : 'light';
+}
 
 export function iconFor(instance, basePath, size = 18) {
     const file = providerIconFile(instance.kind);
@@ -48,17 +55,17 @@ export function providerMark(instance, basePath, size = 20) {
 
 export function createPanelDisplay(instance, snapshot, basePath, mode, style) {
     const window = chooseWindow(snapshot, instance.panelWindowPreference || 'automatic');
-    const percent = displayPercent(window, mode);
-    const pressure = pressureClass(window);
-    const box = new St.BoxLayout({style_class: `tokengrill-panel-display tokengrill-panel-${style} tokengrill-pressure-${pressure}`, y_align: Clutter.ActorAlign.CENTER, y_expand: false});
-    box.set_accessible_name(`${instance.kind} ${instance.displayName}, ${displayLabel(window, mode)}`);
+    const balance = balanceLabel(snapshot);
+    const label = balance || displayLabel(window, mode);
+    const box = new St.BoxLayout({style_class: `tokengrill-panel-display tokengrill-panel-${style} tokengrill-pressure-${pressureClass(window)}`, y_align: Clutter.ActorAlign.CENTER, y_expand: false});
+    box.set_accessible_name(`${instance.kind} ${instance.displayName}, ${label}`);
     const icon = providerMark(instance, basePath, 20);
     box.add_child(icon);
-    if (style === 'ring') box.add_child(createRing(percent, pressure));
-    else if (style === 'bar') box.add_child(createBar(percent, pressure));
-    else box.add_child(new St.Label({text: displayLabel(window, mode), style_class: 'tokengrill-panel-value', y_align: Clutter.ActorAlign.CENTER}));
+    if (!balance && instance.kind !== 'deepseek' && style === 'ring') box.add_child(createRing(displayPercent(window, mode), pressureClass(window)));
+    else if (!balance && instance.kind !== 'deepseek' && style === 'bar') box.add_child(createBar(displayPercent(window, mode), pressureClass(window)));
+    else box.add_child(new St.Label({text: label, style_class: 'tokengrill-panel-value', y_align: Clutter.ActorAlign.CENTER}));
     if (snapshot?.error) {
-        const hasCachedQuota = Boolean(window?.percent !== null && window?.percent !== undefined);
+        const hasCachedQuota = Boolean(balance || (window?.percent !== null && window?.percent !== undefined));
         const glyph = hasCachedQuota ? '·' : '!';
         const status = new St.Label({text: glyph, style_class: hasCachedQuota ? 'tokengrill-panel-stale' : 'tokengrill-panel-error', y_align: Clutter.ActorAlign.CENTER});
         status.set_accessible_name(hasCachedQuota ? 'stale' : 'provider attention required');

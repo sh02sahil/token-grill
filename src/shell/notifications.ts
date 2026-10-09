@@ -1,7 +1,6 @@
 // @ts-nocheck
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
-import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 import type {PanelPercentageMode, ProviderInstance, ProviderSnapshot} from '../core/types.js';
@@ -11,7 +10,7 @@ import {milestoneNotificationText, notificationBucket, selectedNotificationWindo
 import {statePath, readJson, writeJsonAtomic} from '../storage/atomicJson.js';
 
 function providerNotificationIcon(instance: ProviderInstance, extensionPath: string): Gio.Icon {
-    const appearance = St.Settings.get().color_scheme === St.SystemColorScheme.PREFER_DARK ? 'light' : 'dark';
+    const appearance = 'symbolic';
     const baseIcon = Gio.icon_new_for_string(`${extensionPath}/icons/providers/${providerIconFile(instance.kind, appearance)}`);
     const dotSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="8" fill="${accentColor(instance)}"/></svg>`;
     const dotIcon = new Gio.BytesIcon({bytes: new GLib.Bytes(new TextEncoder().encode(dotSvg))});

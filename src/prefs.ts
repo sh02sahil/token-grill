@@ -11,7 +11,10 @@ import {reorderProviders} from './core/providerOrder.js';
 import {defaultHome, displayPath, expandPath, pathExists, providerPaths} from './core/paths.js';
 import {providerIconFile, providerMetadata} from './core/providerMetadata.js';
 import {firstProviderValidationError, validateProviderDraft} from './core/providerValidation.js';
-import {ACCENTS} from './core/types.js';
+import {dataPath, statePath} from './storage/atomicJson.js';
+import {ACCENTS, PROVIDER_KINDS} from './core/types.js';
+import {loadApiKey, loadKimiAuth} from './providers/additional/auth.js';
+import {preferencesPageIcon, registerPreferencesIcons} from './prefsIcons.js';
 import {tokenFromJwt} from './providers/codex/auth.js';
 import {kiroCredentialStatus} from './providers/kiro/auth.js';
 import {antigravityCredentialStatus} from './providers/antigravity/auth.js';
@@ -22,11 +25,9 @@ const ACCENT_COLORS = {
 };
 
 function providerIconPath(basePath, kind) {
-    const appearance = Adw.StyleManager.get_default().dark ? 'light' : 'dark';
-    return `${basePath}/icons/providers/${providerIconFile(kind, appearance)}`;
+    return `${basePath}/icons/providers/${providerIconFile(kind)}`;
 }
 
-const PROVIDER_KINDS = ['codex', 'claude', 'kiro', 'antigravity'];
 const WINDOW_PREFERENCES = ['automatic', 'five-hour', 'weekly', 'monthly'];
 function kindFromIndex(index) { return PROVIDER_KINDS[index] || 'codex'; }
 function kindIndex(kind) { const index = PROVIDER_KINDS.indexOf(kind); return index < 0 ? 0 : index; }
@@ -43,13 +44,14 @@ function labelAccessible(widget, label) {
 }
 
 function providerIcon(basePath, kind, size = 22) {
-    const image = Gtk.Image.new_from_file(providerIconPath(basePath, kind));
+    const image = Gtk.Image.new_from_gicon(Gio.icon_new_for_string(providerIconPath(basePath, kind)));
     image.set_pixel_size(size);
     image.add_css_class('tokengrill-provider-image');
     return image;
 }
 
 function credentialStatus(provider) {
+    if (['deepseek', 'opencode', 'kimi'].includes(provider.kind)) return _('Checking credentials…');
     try {
         const paths = providerPaths(provider);
         if (!pathExists(paths.authFile)) return _('Authentication file missing');
@@ -132,7 +134,7 @@ const ProviderEditorDialog = GObject.registerClass(class ProviderEditorDialog ex
         const identity = addSection(content, _('Identity'), _('Give this account a clear name so it is easy to select in the top bar.'));
         const initialKind = this._provider?.kind || 'codex';
         const initialMetadata = providerMetadata(initialKind);
-        this._kind = new Adw.ComboRow({title: _('Provider'), model: Gtk.StringList.new([_('Codex'), _('Claude'), _('Kiro'), _('Antigravity')]), selected: kindIndex(initialKind)});
+        this._kind = new Adw.ComboRow({title: _('Provider'), model: Gtk.StringList.new(PROVIDER_KINDS.map(kind => _(providerMetadata(kind).label))), selected: kindIndex(initialKind)});
         this._name = new Adw.EntryRow({title: _('Display name'), text: this._provider?.displayName || initialMetadata.label});
         this._home = new Adw.EntryRow({title: _('Account home'), text: this._provider?.accountHome || displayPath(defaultHome(initialKind))});
         identity.add(this._kind); identity.add(this._name); identity.add(this._home);
@@ -155,6 +157,11 @@ const ProviderEditorDialog = GObject.registerClass(class ProviderEditorDialog ex
         }
         accent.add(swatches);
 
+        const collection = addSection(content, _('Collection'));
+        this._live = new Adw.SwitchRow({title: _('Live quota'), subtitle: _('Read the provider quota endpoint using this account.'), active: this._provider?.liveUsageEnabled !== false});
+        this._history = new Adw.SwitchRow({title: _('Local history'), subtitle: _('Index token accounting without storing prompts or responses.'), active: this._provider?.localHistoryEnabled === true});
+        collection.add(this._live); collection.add(this._history);
+
         const locations = addSection(content, _('Data locations'), _('Paths are local, absolute, or begin with ~/. Advanced overrides are optional.'));
         this._auth = new Adw.EntryRow({title: _('Auth file override'), text: this._provider?.authFileOverride || ''});
         this._sessions = new Adw.EntryRow({title: _('Sessions directory override'), text: this._provider?.sessionsDirectoryOverride || ''});
@@ -172,10 +179,6 @@ const ProviderEditorDialog = GObject.registerClass(class ProviderEditorDialog ex
         this._windowPreference = new Adw.ComboRow({title: _('Quota window'), subtitle: _('Choose the limit that drives this account\u2019s panel reading.'), model: Gtk.StringList.new([_('Automatic'), _('Five-hour'), _('Weekly'), _('Monthly')]), selected: windowIndex(this._provider?.panelWindowPreference || 'automatic')});
         panel.add(this._showPanel); panel.add(this._windowPreference);
 
-        const collection = addSection(content, _('Collection'));
-        this._live = new Adw.SwitchRow({title: _('Live quota'), subtitle: _('Read the provider quota endpoint using this account.'), active: this._provider?.liveUsageEnabled !== false});
-        this._history = new Adw.SwitchRow({title: _('Local history'), subtitle: _('Index token accounting without storing prompts or responses.'), active: this._provider?.localHistoryEnabled === true});
-        collection.add(this._live); collection.add(this._history);
         if (this._provider) {
             const removal = addSection(content, _('Remove provider'), _('Provider credentials, sessions, and files are never changed.'));
             const remove = pointer(new Gtk.Button({label: _('Delete provider'), css_classes: ['destructive-action'], halign: Gtk.Align.FILL, hexpand: true, margin_top: 8, margin_bottom: 8}));
@@ -204,13 +207,17 @@ const ProviderEditorDialog = GObject.registerClass(class ProviderEditorDialog ex
     }
 
     _updateCapabilities() {
-        const metadata = providerMetadata(kindFromIndex(this._kind.selected));
+        const kind = kindFromIndex(this._kind.selected);
+        const metadata = providerMetadata(kind);
         if (!metadata.localHistorySupported) this._history.active = false;
         this._history.sensitive = metadata.localHistorySupported;
         this._history.subtitle = metadata.localHistorySupported ? _('Index token accounting without storing prompts or responses.') : _(`${metadata.label} local history is not supported; live quota remains available.`);
         if (metadata.quotaWindows.length === 1) this._windowPreference.selected = windowIndex(metadata.defaultQuotaWindow);
         this._windowPreference.sensitive = metadata.quotaWindows.length > 1;
         this._sessions.sensitive = metadata.localHistorySupported;
+        this._live.title = kind === 'deepseek' ? _('Live balance') : _('Live quota');
+        this._live.subtitle = kind === 'deepseek' ? _('Read your prepaid API balance using the DeepSeek key in OpenCode auth.json or a JSON API key file.') : kind === 'opencode' ? _('Read Go subscription quotas. Zen pay-as-you-go balance is not exposed by this API.') : kind === 'kimi' ? _('Read Kimi Code subscription quotas using your CLI login. Run /login inside kimi when credentials expire.') : _('Read the provider quota endpoint using this account.');
+        if (!metadata.quotaWindows.length) this._windowPreference.selected = 0;
     }
 
     _updateResolved() {
@@ -222,12 +229,14 @@ const ProviderEditorDialog = GObject.registerClass(class ProviderEditorDialog ex
             draft.sessionsDirectoryOverride = this._sessions?.text ? expandPath(this._sessions.text) : null;
             const paths = providerPaths(draft);
             this._resolved.subtitle = `${displayPath(paths.authFile)} \u00b7 ${displayPath(paths.sessionsDirectory)}`;
+            if (draft.kind === 'kimi' && !draft.authFileOverride) this._resolved.subtitle = `${displayPath(paths.configFile)} · credentials selected by configuration`;
         } catch (error) { this._resolved.subtitle = error.message; }
     }
 
     _validate() {
         const kind = kindFromIndex(this._kind?.selected);
         const draft = this._provider ? {...this._provider} : newProvider(kind, this._home?.text || '');
+        draft.kind = kind;
         draft.displayName = this._name?.text || '';
         draft.accountHome = this._home?.text || '';
         draft.authFileOverride = this._auth?.text || null;
@@ -366,7 +375,7 @@ const ProviderReorderDialog = GObject.registerClass(class ProviderReorderDialog 
 });
 
 const ProvidersPage = GObject.registerClass(class ProvidersPage extends Adw.PreferencesPage {
-    _init(settings, window, basePath) { super._init({title: _('Providers'), icon_name: 'system-users-symbolic'}); this._settings = settings; this._window = window; this._basePath = basePath; this._groups = []; this._render(); }
+    _init(settings, window, basePath) { super._init({title: _('Providers'), icon_name: preferencesPageIcon('system-users-symbolic', 'tokengrill-providers-symbolic')}); this._settings = settings; this._window = window; this._basePath = basePath; this._groups = []; this._render(); }
     _render() {
         for (const group of this._groups) this.remove(group);
         this._groups = [];
@@ -390,6 +399,13 @@ const ProvidersPage = GObject.registerClass(class ProvidersPage extends Adw.Pref
                 const label = status === 'authenticated' ? _('Authenticated') : status === 'expired-refreshable' ? _('Credential expired but refreshable') : status === 'login-required' ? _('Login required') : _('Credential unreadable');
                 row.subtitle = providerSubtitle(provider, label);
             }).catch(() => { row.subtitle = providerSubtitle(provider, _('Credential unreadable')); });
+            if (['deepseek', 'opencode', 'kimi'].includes(provider.kind)) {
+                const cancellable = new Gio.Cancellable();
+                row.connect('destroy', () => cancellable.cancel());
+                const auth = provider.kind === 'kimi' ? loadKimiAuth(provider, cancellable) : loadApiKey(provider, cancellable);
+                auth.then(() => { if (!cancellable.is_cancelled()) row.subtitle = providerSubtitle(provider, _('Authenticated')); })
+                    .catch(error => { if (!cancellable.is_cancelled()) row.subtitle = providerSubtitle(provider, error.message); });
+            }
             row.add_prefix(providerIcon(this._basePath, provider.kind));
             const enabled = pointer(new Gtk.Switch({active: provider.enabled, valign: Gtk.Align.CENTER}));
             enabled.set_tooltip_text(_('Enable collection'));
@@ -412,7 +428,7 @@ const ProvidersPage = GObject.registerClass(class ProvidersPage extends Adw.Pref
     _reorder(providers) {
         new ProviderReorderDialog(providers, ordered => { writeProviders(this._settings, ordered); this._render(); }, this._basePath, this._window);
     }
-    _discover() {
+    async _discover() {
         const providers = readProviders(this._settings); const home = Gio.File.new_for_path(GLib.get_home_dir()); const found = []; let candidates = 0;
         const enumerator = home.enumerate_children('standard::name,standard::type', Gio.FileQueryInfoFlags.NONE, null); let info;
         while ((info = enumerator.next_file(null))) {
@@ -460,9 +476,20 @@ const ProvidersPage = GObject.registerClass(class ProvidersPage extends Adw.Pref
             }
         }
 
+        for (const kind of ['deepseek', 'opencode', 'kimi']) {
+            const candidate = newProvider(kind, defaultHome(kind));
+            try {
+                const cancellable = new Gio.Cancellable();
+                if (kind === 'kimi') await loadKimiAuth(candidate, cancellable);
+                else await loadApiKey(candidate, cancellable);
+                candidates++;
+                if (![...providers, ...found].some(item => item.kind === kind && expandPath(item.accountHome) === expandPath(candidate.accountHome))) found.push(candidate);
+            } catch { /* An unconfigured provider is not a discovery candidate. */ }
+        }
+
         if (!found.length) {
             const heading = candidates ? _('All discovered accounts are already configured') : _('No new accounts found');
-            const body = candidates ? _('The discovered account homes are already in Token Grill.') : _('Token Grill checked direct ~/.codex*, ~/.claude*, ~/.antigravity*, and local credentials for authentication or local history.');
+            const body = candidates ? _('The discovered account homes are already in Token Grill.') : _('Token Grill checked Codex, Claude, Kiro, Antigravity, Kimi Code, and OpenCode credentials for configured accounts.');
             const dialog = new Adw.AlertDialog({heading, body}); dialog.add_response('close', _('Close')); dialog.present(this._window); return;
         }
         const dialog = new Adw.Dialog({title: _('Discover accounts'), content_width: 520, content_height: 520});
@@ -479,11 +506,15 @@ const ProvidersPage = GObject.registerClass(class ProvidersPage extends Adw.Pref
 
 const GeneralPage = GObject.registerClass(class GeneralPage extends Adw.PreferencesPage {
     _init(settings) {
-        super._init({title: _('General'), icon_name: 'preferences-system-symbolic'}); this._settings = settings;
+        super._init({title: _('General'), icon_name: preferencesPageIcon('preferences-system-symbolic', 'tokengrill-general-symbolic')}); this._settings = settings;
         const appearance = new Adw.PreferencesGroup({title: _('Panel appearance'), description: _('Choose what the active provider looks like in the top bar.')});
         const mode = new Adw.ComboRow({title: _('Percentage'), model: Gtk.StringList.new([_('Remaining'), _('Used')]), selected: settings.get_string('panel-percentage-mode') === 'used' ? 1 : 0}); mode.connect('notify::selected', () => settings.set_string('panel-percentage-mode', mode.selected === 1 ? 'used' : 'remaining'));
         const style = new Adw.ComboRow({title: _('Panel style'), model: Gtk.StringList.new([_('Icon + percentage'), _('Circular meter'), _('Linear meter')]), selected: settings.get_string('panel-display-style') === 'ring' ? 1 : settings.get_string('panel-display-style') === 'bar' ? 2 : 0}); style.connect('notify::selected', () => settings.set_string('panel-display-style', style.selected === 1 ? 'ring' : style.selected === 2 ? 'bar' : 'text'));
         appearance.add(mode); appearance.add(style); this.add(appearance);
+        const panelGroup = new Adw.PreferencesGroup({title: _('Panel accounts')});
+        const allAccounts = new Adw.SwitchRow({title: _('Show all accounts'), subtitle: _('Show a chip for every account in the top bar instead of only the active one.'), active: settings.get_boolean('panel-show-all-accounts')});
+        settings.bind('panel-show-all-accounts', allAccounts, 'active', Gio.SettingsBindFlags.DEFAULT);
+        panelGroup.add(allAccounts); this.add(panelGroup);
         const refreshGroup = new Adw.PreferencesGroup({title: _('Refresh and storage')});
         for (const [key, title, lower, upper, step] of [['refresh-interval-seconds', _('Refresh interval'), 60, 3600, 60]]) { const row = new Adw.SpinRow({title, adjustment: new Gtk.Adjustment({lower, upper, step_increment: step, value: settings.get_uint(key)} )}); settings.bind(key, row, 'value', Gio.SettingsBindFlags.DEFAULT); refreshGroup.add(row); }
         this.add(refreshGroup);
@@ -494,7 +525,7 @@ const GeneralPage = GObject.registerClass(class GeneralPage extends Adw.Preferen
 
 const NotificationsPage = GObject.registerClass(class NotificationsPage extends Adw.PreferencesPage {
     _init(settings) {
-        super._init({title: _('Notifications'), icon_name: 'preferences-system-notifications-symbolic'});
+        super._init({title: _('Notifications'), icon_name: preferencesPageIcon('preferences-system-notifications-symbolic', 'tokengrill-notifications-symbolic')});
         this._settings = settings;
         const group = new Adw.PreferencesGroup({title: _('Quota alerts'), description: _('Each account sends at most one alert when its selected limit crosses a usage step.')});
         const enabled = new Adw.SwitchRow({title: _('Usage notifications'), subtitle: _('Track the same Five-hour, Weekly, Monthly, or automatic limit selected for that account.'), active: settings.get_boolean('notifications-enabled')});
@@ -542,11 +573,12 @@ const NotificationsPage = GObject.registerClass(class NotificationsPage extends 
 });
 
 const DataPage = GObject.registerClass(class DataPage extends Adw.PreferencesPage {
-    _init() { super._init({title: _('Data'), icon_name: 'folder-symbolic'}); const group = new Adw.PreferencesGroup({title: _('Local data'), description: _('Only compact aggregates and checkpoints are stored. Provider logs are never modified.')}); group.add(new Adw.ActionRow({title: _('Usage history'), subtitle: 'XDG data directory'})); group.add(new Adw.ActionRow({title: _('Parser checkpoints'), subtitle: 'XDG state directory'})); this.add(group); }
+    _init() { super._init({title: _('Data'), icon_name: 'folder-symbolic'}); const group = new Adw.PreferencesGroup({title: _('Local data'), description: _('Only compact aggregates and checkpoints are stored. Provider logs are never modified.')}); group.add(new Adw.ActionRow({title: _('Usage history'), subtitle: displayPath(dataPath('history-v1.json'))})); group.add(new Adw.ActionRow({title: _('Parser checkpoints'), subtitle: displayPath(statePath('checkpoints-v1.json'))})); this.add(group); }
 });
 
 export default class TokenGrillPreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
+        registerPreferencesIcons(this.path);
         const settings = this.getSettings(); window.set_default_size(760, 700); window.add_css_class('tokengrill-preferences');
         const css = new Gtk.CssProvider(); css.load_from_path(`${this.path}/prefs.css`); const display = Gdk.Display.get_default(); if (display) Gtk.StyleContext.add_provider_for_display(display, css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION);
         window.add(new GeneralPage(settings)); window.add(new ProvidersPage(settings, window, this.path)); window.add(new NotificationsPage(settings)); window.add(new DataPage());
