@@ -1,272 +1,368 @@
-// @ts-nocheck
+// The selected account's details, built from native GNOME Shell menu items so
+// the popup follows the shell theme, accent colour, and light/dark style.
 import Clutter from 'gi://Clutter';
-import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
+import Pango from 'gi://Pango';
 import St from 'gi://St';
-import {resolveQuotaSelection, displayLabel, pressureClass} from '../core/display.js';
-import {formatResetCountdown} from '../core/timeMath.js';
-import {providerMetadata} from '../core/providerMetadata.js';
+
+import {gettext as _, ngettext} from 'resource:///org/gnome/shell/extensions/extension.js';
+import {formatTime} from 'resource:///org/gnome/shell/misc/dateUtils.js';
+import * as Animation from 'resource:///org/gnome/shell/ui/animation.js';
+import * as BarLevel from 'resource:///org/gnome/shell/ui/barLevel.js';
+import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
+import {displayLabel, displayPercent, pressureClass, selectWindow} from '../core/display.js';
 import {historyMetrics} from '../core/historyMetrics.js';
-import type {ProviderInstance, ProviderRuntimeState, ProviderSnapshot, UsageWindow} from '../core/types.js';
-import {formatReset, iconFor} from './accountChip.js';
-import {makeShellInteractive} from './interaction.js';
+import {errorText, historySummary, refreshStatusText, windowCaption} from '../core/popupModel.js';
+import {providerMetadata} from '../core/providerMetadata.js';
+import {durationUntil, formatDuration} from '../core/timeMath.js';
+import type {
+    CanonicalQuotaWindow,
+    LimitResetCreditSummary,
+    PanelPercentageMode,
+    ProviderInstance,
+    ProviderRuntimeState,
+    ProviderSnapshot,
+    UsageWindow,
+} from '../core/types.js';
+import {providerMark} from './accountChip.js';
+import {TRANSLATOR} from './translator.js';
 
-function text(value, style = '') { return new St.Label({text: value, style_class: style, y_align: Clutter.ActorAlign.CENTER}); }
+export type QuotaWindow = Exclude<CanonicalQuotaWindow, 'other'>;
 
-function roundedPath(cr, x, y, width, height) {
-    if (width <= 0) return;
-    const radius = Math.min(height / 2, width / 2);
-    cr.newPath();
-    cr.arc(x + width - radius, y + radius, radius, -Math.PI / 2, 0);
-    cr.arc(x + width - radius, y + height - radius, radius, 0, Math.PI / 2);
-    cr.arc(x + radius, y + height - radius, radius, Math.PI / 2, Math.PI);
-    cr.arc(x + radius, y + radius, radius, Math.PI, Math.PI * 1.5);
-    cr.closePath();
+export interface ProviderDetailActions {
+    refresh: (provider: ProviderInstance) => void;
+    selectWindow: (provider: ProviderInstance, window: QuotaWindow) => void;
 }
 
-function drawMeter(area, fraction, color) {
-    const cr = area.get_context();
-    const width = area.get_width();
-    const height = area.get_height();
-    roundedPath(cr, 0, 0, width, height);
-    cr.setSourceRGBA(0.5, 0.5, 0.5, 0.25); cr.fill();
-    if (fraction === null || fraction === undefined) return;
-    cr.save(); cr.rectangle(0, 0, width * Math.max(0, Math.min(1, fraction)), height); cr.clip();
-    roundedPath(cr, 0, 0, width, height); cr.setSourceRGBA(...color, 1); cr.fill(); cr.restore();
+const WINDOWS: QuotaWindow[] = ['five-hour', 'weekly', 'monthly'];
+
+function windowName(window: QuotaWindow): string {
+    if (window === 'five-hour')
+        return _('Five-hour');
+    if (window === 'weekly')
+        return _('Weekly');
+    return _('Monthly');
 }
 
-function pressureColor(window: UsageWindow | null) {
-    const pressure = pressureClass(window);
-    return pressure === 'critical' ? [0.95, 0.28, 0.2] : pressure === 'warning' ? [0.95, 0.62, 0.2] : [0.96, 0.72, 0.2];
+function label(text: string, styleClass: string, params: Partial<St.Label.ConstructorProps> = {}): St.Label {
+    return new St.Label({text, style_class: styleClass, y_align: Clutter.ActorAlign.CENTER, ...params});
 }
 
-function refreshButton(callback) {
-    const item = new St.Button({style_class: 'tokengrill-icon-button', reactive: true, can_focus: true, track_hover: true});
-    item._icon = new St.Icon({icon_name: 'view-refresh-symbolic', icon_size: 16, style_class: 'system-status-icon'});
-    item.set_child(item._icon);
-    item.set_accessible_name('Refresh this account');
-    item.connect('clicked', callback);
-    return makeShellInteractive(item, 'Refresh this account');
+function wrappingLabel(styleClass: string, params: Partial<St.Label.ConstructorProps> = {}): St.Label {
+    const actor = label('', styleClass, params);
+    actor.clutter_text.line_wrap = true;
+    actor.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
+    return actor;
 }
 
-export const ProviderDashboard = GObject.registerClass(class ProviderDashboard extends St.BoxLayout {
-    _init(basePath, actions = {}) {
-        super._init({vertical: true, style_class: 'tokengrill-provider-pane', x_expand: true});
-        this._basePath = basePath;
-        this._actions = actions;
-        this._build();
+function clockLabel(timestamp: number): string {
+    return formatTime(new Date(timestamp), {timeOnly: true});
+}
+
+function countdown(timestamp: number): string {
+    const parts = durationUntil(timestamp);
+    return parts ? formatDuration(TRANSLATOR, parts) : '';
+}
+
+// Display-only rows stay reactive (so the theme does not render them as
+// insensitive) but are never activatable, hovered, or focused.
+export class StaticMenuItem extends PopupMenu.PopupBaseMenuItem {
+    static {
+        GObject.registerClass({GTypeName: 'TokenGrillStaticMenuItem'}, this);
     }
 
-    _build() {
-        this._header = new St.BoxLayout({style_class: 'tokengrill-pane-header', x_expand: true});
-        this._logoBadge = new St.Bin({style_class: 'tokengrill-logo-badge', x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
-        this._header.add_child(this._logoBadge);
-        this._identity = new St.BoxLayout({vertical: true, style_class: 'tokengrill-pane-identity', x_expand: true});
-        this._title = text('', 'tokengrill-pane-title');
-        this._subtitle = text('', 'tokengrill-secondary');
-        this._refreshStatus = text('', 'tokengrill-refresh-status');
-        this._identity.add_child(this._title); this._identity.add_child(this._subtitle); this._identity.add_child(this._refreshStatus);
-        this._header.add_child(this._identity);
-        this._status = text('', 'tokengrill-status-pill'); this._header.add_child(this._status);
-        this._refreshButton = refreshButton(() => this._actions.refresh?.(this._instance)); this._header.add_child(this._refreshButton);
-        this.add_child(this._header);
+    constructor(styleClass: string) {
+        super({reactive: true, activate: false, hover: false, can_focus: false, style_class: styleClass});
+        this.track_hover = false;
+    }
+}
 
-        this._summary = new St.BoxLayout({style_class: 'tokengrill-summary', x_expand: true});
-        this._summaryText = new St.BoxLayout({vertical: true, x_expand: true});
-        this._summaryValue = text('—', 'tokengrill-summary-value');
-        this._summaryCaption = text('Waiting for quota data', 'tokengrill-summary-caption');
-        this._summaryText.add_child(this._summaryValue); this._summaryText.add_child(this._summaryCaption); this._summary.add_child(this._summaryText);
-        this._summaryReset = text('', 'tokengrill-summary-reset'); this._summary.add_child(this._summaryReset); this.add_child(this._summary);
-
-        const windows = new St.BoxLayout({style_class: 'tokengrill-window-grid', x_expand: true});
-        this._windowCards = {fiveHour: this._makeWindowCard('Five-hour', 'five-hour'), weekly: this._makeWindowCard('Weekly', 'weekly'), monthly: this._makeWindowCard('Monthly', 'monthly')};
-        windows.add_child(this._windowCards.fiveHour.root); windows.add_child(this._windowCards.weekly.root); windows.add_child(this._windowCards.monthly.root); this.add_child(windows);
-
-        this._credits = this._makeCreditsCard();
-        this.add_child(this._credits.root); this.add_child(this._credits.details);
-
-        const metrics = new St.BoxLayout({style_class: 'tokengrill-metrics', x_expand: true});
-        this._today = this._metric('Today'); this._month = this._metric('30 days'); this._cost = this._metric('API est. · 30 days');
-        metrics.add_child(this._today.root); metrics.add_child(this._month.root); metrics.add_child(this._cost.root); this.add_child(metrics);
-
-        this._errorRow = new St.BoxLayout({style_class: 'tokengrill-error-row', x_expand: true});
-        this._errorIcon = new St.Icon({icon_name: 'dialog-warning-symbolic', icon_size: 16}); this._errorText = text('', 'tokengrill-error-text');
-        this._errorRow.add_child(this._errorIcon); this._errorRow.add_child(this._errorText); this._errorRow.hide(); this.add_child(this._errorRow);
+// Account name, plan, refresh status, and a refresh button.
+class IdentityItem extends StaticMenuItem {
+    static {
+        GObject.registerClass({GTypeName: 'TokenGrillIdentityItem'}, this);
     }
 
-    _metric(title) {
-        const root = new St.BoxLayout({vertical: true, style_class: 'tokengrill-metric', x_expand: true});
-        root.add_child(text(title.toUpperCase(), 'tokengrill-metric-label'));
-        const value = text('—', 'tokengrill-metric-value'); root.add_child(value);
-        const unit = text('', 'tokengrill-metric-unit'); root.add_child(unit); return {root, value, unit};
+    private _markBin: St.Bin;
+    private _title: St.Label;
+    private _subtitle: St.Label;
+    private _status: St.Label;
+    private _spinner: Animation.Spinner;
+    private _refreshButton: St.Button;
+    private _busy = false;
+
+    constructor(onRefresh: () => void) {
+        super('tokengrill-identity');
+        this._markBin = new St.Bin({y_align: Clutter.ActorAlign.CENTER});
+        this.add_child(this._markBin);
+
+        const text = new St.BoxLayout({
+            orientation: Clutter.Orientation.VERTICAL,
+            x_expand: true,
+            y_align: Clutter.ActorAlign.CENTER,
+            style_class: 'tokengrill-identity-text',
+        });
+        this._title = label('', 'tokengrill-title');
+        this._subtitle = wrappingLabel('tokengrill-caption');
+        this._status = wrappingLabel('tokengrill-caption');
+        text.add_child(this._title);
+        text.add_child(this._subtitle);
+        text.add_child(this._status);
+        this.add_child(text);
+
+        this._spinner = new Animation.Spinner(16, {animate: true, hideOnStop: true});
+        this._spinner.y_align = Clutter.ActorAlign.CENTER;
+        this.add_child(this._spinner);
+
+        this._refreshButton = new St.Button({
+            style_class: 'icon-button flat',
+            can_focus: true,
+            y_align: Clutter.ActorAlign.CENTER,
+            child: new St.Icon({icon_name: 'view-refresh-symbolic'}),
+            accessible_name: _('Refresh This Account'),
+        });
+        this._refreshButton.connect('clicked', () => onRefresh());
+        this.add_child(this._refreshButton);
     }
 
-    _makeWindowCard(title, canonical) {
-        const root = makeShellInteractive(new St.Button({style_class: 'tokengrill-window-card', reactive: true, can_focus: true, track_hover: true, x_expand: true}), `${title} quota window`);
-        const content = new St.BoxLayout({vertical: true, style_class: 'tokengrill-window-card-content'}); root.set_child(content);
+    setMark(actor: Clutter.Actor): void {
+        this._markBin.set_child(actor);
+    }
+
+    setText(title: string, subtitle: string, status: string): void {
+        this._title.set_text(title);
+        this._subtitle.set_text(subtitle);
+        this._status.set_text(status);
+    }
+
+    setBusy(busy: boolean): void {
+        if (busy === this._busy)
+            return;
+        this._busy = busy;
+        // The spinner takes the button's place while this account refreshes.
+        this._refreshButton.visible = !busy;
+        if (busy)
+            this._spinner.play();
+        else
+            this._spinner.stop();
+    }
+}
+
+// One quota window.  Activating it chooses the window shown in the top bar
+// without closing the menu; the dot ornament marks the current choice.
+class WindowItem extends PopupMenu.PopupBaseMenuItem {
+    static {
+        GObject.registerClass({GTypeName: 'TokenGrillWindowItem'}, this);
+    }
+
+    private _title: string;
+    private _onSelect: () => void;
+    private _warning: St.Icon;
+    private _value: St.Label;
+    private _meter: BarLevel.BarLevel;
+    private _caption: St.Label;
+
+    constructor(title: string, onSelect: () => void) {
+        super({style_class: 'tokengrill-window-item'});
+        this._title = title;
+        this._onSelect = onSelect;
+        this.setOrnament(PopupMenu.Ornament.NO_DOT);
+
+        const box = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, x_expand: true, style_class: 'tokengrill-window-box'});
         const head = new St.BoxLayout({x_expand: true});
-        const name = text(title, 'tokengrill-window-title'); const value = text('Unavailable', 'tokengrill-window-value');
-        head.add_child(name); head.add_child(value); content.add_child(head);
-        const meter = new St.DrawingArea({height: 6, style_class: 'tokengrill-meter', x_expand: true}); content.add_child(meter);
-        const reset = text('No active data', 'tokengrill-secondary'); content.add_child(reset);
-        const selected = text('', 'tokengrill-window-selected-label'); content.add_child(selected);
-        const card = {root, value, meter, reset, selected, window: null, canonical, selectSignalId: 0, repaintSignalId: 0};
-        card.selectSignalId = root.connect('clicked', () => this._actions.selectWindow?.(this._instance, canonical));
-        card.repaintSignalId = meter.connect('repaint', area => drawMeter(area, card.window?.percent ?? null, pressureColor(card.window)));
-        return card;
+        const nameLabel = label(title, 'tokengrill-window-name', {x_expand: true});
+        this._warning = new St.Icon({icon_name: 'dialog-warning-symbolic', style_class: 'popup-menu-icon', visible: false});
+        this._value = label('—', 'tokengrill-value');
+        head.add_child(nameLabel);
+        head.add_child(this._warning);
+        head.add_child(this._value);
+
+        this._meter = new BarLevel.BarLevel({
+            style_class: 'slider tokengrill-meter',
+            x_expand: true,
+            reactive: false,
+            can_focus: false,
+            accessible_name: _('%s usage').format(title),
+        });
+        this._caption = wrappingLabel('tokengrill-caption');
+        box.add_child(head);
+        box.add_child(this._meter);
+        box.add_child(this._caption);
+        this.add_child(box);
+        this.label_actor = nameLabel;
     }
 
-    _makeCreditsCard() {
-        const root = makeShellInteractive(new St.Button({style_class: 'tokengrill-reset-credits', reactive: true, can_focus: true, track_hover: true, x_expand: true}), 'Limit reset credits');
-        const content = new St.BoxLayout({style_class: 'tokengrill-reset-credits-content', x_expand: true});
-        content.add_child(new St.Icon({icon_name: 'view-refresh-symbolic', icon_size: 15, style_class: 'tokengrill-reset-credits-icon'}));
-        const labels = new St.BoxLayout({vertical: true, x_expand: true});
-        const value = text('Unavailable', 'tokengrill-reset-credits-value'); const expiry = text('', 'tokengrill-secondary');
-        labels.add_child(text('LIMIT RESET CREDITS', 'tokengrill-metric-label')); labels.add_child(value); labels.add_child(expiry); content.add_child(labels);
-        const chevron = new St.Icon({icon_name: 'pan-end-symbolic', icon_size: 12, style_class: 'tokengrill-secondary'}); content.add_child(chevron); root.set_child(content);
-        const details = new St.BoxLayout({vertical: true, style_class: 'tokengrill-reset-credit-details', x_expand: true}); details.hide();
-        const clickSignalId = root.connect('clicked', () => { if (!root._available) return; root._expanded = !root._expanded; details.visible = root._expanded; chevron.rotation_angle_z = root._expanded ? 90 : 0; });
-        return {root, value, expiry, details, chevron, clickSignalId};
+    override activate(_event: Clutter.Event): void {
+        this._onSelect();
     }
 
-    update(instance: ProviderInstance | null, snapshot: ProviderSnapshot | null, mode = 'remaining', runtime: ProviderRuntimeState | null = null) {
+    update(window: UsageWindow | null, mode: PanelPercentageMode, selected: boolean): void {
+        const percent = displayPercent(window, mode);
+        const pressure = pressureClass(window);
+        const value = window ? displayLabel(TRANSLATOR, window, mode) : _('Unavailable');
+        this._value.set_text(value);
+        this._meter.value = percent ?? 0;
+        this._meter.visible = percent !== null;
+        this._caption.set_text(windowCaption(TRANSLATOR, window));
+        // Pressure is shown with an icon as well as the number, never colour alone.
+        this._warning.visible = pressure !== 'neutral';
+        this.setOrnament(selected ? PopupMenu.Ornament.DOT : PopupMenu.Ornament.NO_DOT);
+
+        const parts = [this._title, value];
+        if (window?.resetAt)
+            parts.push(_('resets in %s').format(countdown(window.resetAt)));
+        if (pressure === 'critical')
+            parts.push(_('almost exhausted'));
+        else if (pressure === 'warning')
+            parts.push(_('running low'));
+        if (selected)
+            parts.push(_('shown in the top bar'));
+        this.accessible_name = parts.join(', ');
+    }
+}
+
+// A non-interactive line of text, optionally led by an icon.
+export class InfoItem extends StaticMenuItem {
+    static {
+        GObject.registerClass({GTypeName: 'TokenGrillInfoItem'}, this);
+    }
+
+    private _label: St.Label;
+
+    constructor(iconName: string | null = null) {
+        super('tokengrill-info-item');
+        if (iconName)
+            this.add_child(new St.Icon({icon_name: iconName, style_class: 'popup-menu-icon', y_align: Clutter.ActorAlign.START}));
+        this._label = wrappingLabel('tokengrill-caption', {x_expand: true});
+        this.add_child(this._label);
+        this.label_actor = this._label;
+    }
+
+    setText(text: string | null): void {
+        this._label.set_text(text ?? '');
+        this.visible = Boolean(text);
+    }
+}
+
+function creditsMenuText(summary: LimitResetCreditSummary, count: number): string {
+    if (summary.stale)
+        return ngettext('Reset Credits · %d Available (Cached)', 'Reset Credits · %d Available (Cached)', count).format(count);
+    return ngettext('Reset Credits · %d Available', 'Reset Credits · %d Available', count).format(count);
+}
+
+function creditsNoneText(summary: LimitResetCreditSummary | null): string | null {
+    return summary?.availableCount === 0 ? _('Reset credits: none available') : null;
+}
+
+export class ProviderDetail extends PopupMenu.PopupMenuSection {
+    private _extensionPath: string;
+    private _actions: ProviderDetailActions;
+    private _instance: ProviderInstance | null = null;
+    private _identity: IdentityItem;
+    private _error: InfoItem;
+    private _windows = new Map<QuotaWindow, WindowItem>();
+    private _credits: PopupMenu.PopupSubMenuMenuItem;
+    private _creditsNone: InfoItem;
+    private _history: InfoItem;
+    private _items: PopupMenu.PopupBaseMenuItem[];
+    private _creditsKey = '';
+
+    constructor(extensionPath: string, actions: ProviderDetailActions) {
+        super();
+        this._extensionPath = extensionPath;
+        this._actions = actions;
+        this._identity = new IdentityItem(() => this._withInstance(instance => this._actions.refresh(instance)));
+        this._error = new InfoItem('dialog-warning-symbolic');
+        for (const window of WINDOWS) {
+            const item = new WindowItem(windowName(window), () => this._withInstance(instance => this._actions.selectWindow(instance, window)));
+            this._windows.set(window, item);
+        }
+        this._credits = new PopupMenu.PopupSubMenuMenuItem(_('Reset Credits'), false);
+        this._creditsNone = new InfoItem();
+        this._history = new InfoItem();
+        this._items = [this._identity, this._error, ...this._windows.values(), this._credits, this._creditsNone, this._history];
+        for (const item of this._items)
+            this.addMenuItem(item);
+    }
+
+    private _withInstance(callback: (instance: ProviderInstance) => void): void {
+        if (this._instance)
+            callback(this._instance);
+    }
+
+    update(
+        instance: ProviderInstance | null,
+        snapshot: ProviderSnapshot | null,
+        mode: PanelPercentageMode,
+        runtime: ProviderRuntimeState | null
+    ): void {
         this._instance = instance;
-        this._lastSnapshot = snapshot;
-        this._lastMode = mode;
-        this._lastRuntime = runtime;
-        if (!instance) { this.hide(); return; }
-        this.show();
-        this._logoBadge.set_child(iconFor(instance, this._basePath, 22));
-        this._title.set_text(instance.displayName);
+        if (!instance) {
+            for (const item of this._items)
+                item.visible = false;
+            return;
+        }
         const metadata = providerMetadata(instance.kind);
-        this._subtitle.set_text(`${metadata.label} · ${snapshot?.plan || 'account'}`);
-        const state = snapshot?.state || 'unknown';
-        this._status.set_text(state === 'ready' ? 'LIVE' : state === 'local' ? 'LOCAL' : state === 'stale' ? 'STALE' : state === 'error' ? 'ERROR' : 'SETUP');
-        this._status.set_style_class_name(`tokengrill-status-pill tokengrill-status-${state}`);
-        const refresh = runtime?.refresh;
-        const busy = ['queued', 'fetching-limits', 'fetching-reset-credits', 'scanning-history'].includes(refresh?.phase);
-        const finishedAt = refresh?.completedAt || 0;
-        const recentlyFinished = Boolean(finishedAt && Date.now() - finishedAt < 1250);
-        this._refreshButton.reactive = !busy;
-        this._refreshButton._icon.icon_name = busy ? 'view-refresh-symbolic' : ['failed', 'partial'].includes(refresh?.outcome) && recentlyFinished ? 'dialog-warning-symbolic' : recentlyFinished ? 'object-select-symbolic' : 'view-refresh-symbolic';
-        this._refreshButton._icon.icon_size = busy ? 14 : 16;
-        this._setSpinning(this._refreshButton._icon, busy);
-        if (busy && this._feedbackTimer) {
-            GLib.Source.remove(this._feedbackTimer);
-            this._feedbackTimer = 0;
-        } else if (!busy && recentlyFinished && !this._feedbackTimer) {
-            this._feedbackTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, ['failed', 'partial'].includes(refresh?.outcome) ? 2000 : 1250, () => {
-                this._feedbackTimer = 0;
-                if (this._refreshButton && this._instance)
-                    this.update(this._instance, this._lastSnapshot, this._lastMode, this._lastRuntime);
-                return GLib.SOURCE_REMOVE;
-            });
+        this._identity.visible = true;
+        this._identity.setMark(providerMark(this._extensionPath, instance, 28));
+        // Provider, account, and plan, skipping repeats such as a plan named after the provider.
+        const subtitle: string[] = [];
+        for (const part of [metadata.label, snapshot?.account, snapshot?.plan]) {
+            if (part && !subtitle.some(existing => existing.toLowerCase() === part.toLowerCase()))
+                subtitle.push(part);
         }
-        this._refreshStatus.set_text(busy ? refresh.phase === 'queued' ? 'Queued for refresh…' : refresh.phase === 'scanning-history' ? 'Limits updated · updating history…' : refresh.phase === 'fetching-reset-credits' ? 'Limits updated · checking reset credits…' : 'Refreshing limits…' : refresh?.outcome === 'unchanged' ? `Checked ${clockLabel(refresh.completedAt)} · no change` : refresh?.outcome === 'partial' ? `Quota updated · some sources unavailable` : refresh?.outcome === 'failed' ? `Cached from ${clockLabel(snapshot?.quotaFetchedAt)} · refresh failed` : snapshot?.quotaFetchedAt ? `Updated ${clockLabel(snapshot.quotaFetchedAt)} · ${ageLabel(snapshot.quotaFetchedAt)}` : 'Never refreshed');
-        const selection = resolveQuotaSelection(snapshot, instance.panelWindowPreference || 'automatic');
-        const selected = selection.selected;
-        this._summary.set_style_class_name(`tokengrill-summary tokengrill-pressure-${pressureClass(selected)}`);
-        this._summaryValue.set_text(displayLabel(selected, mode));
-        const exact = quotaValueLabel(selected);
-        this._summaryCaption.set_text(selection.fallbackUsed ? `${instance.panelWindowPreference} selected · showing ${selected?.label || 'available data'} until it returns.` : selected ? `${selected.label}${exact ? ` · ${exact}` : ''} · resets in ${formatResetCountdown(selected.resetAt)}` : 'Waiting for quota data');
-        this._summaryReset.set_text(selected?.resetAt ? formatReset(selected.resetAt) : '');
-        const byCanonical = new Map((snapshot?.windows || []).map(window => [window.canonicalWindow, window]));
-        this._updateWindowCard(this._windowCards.fiveHour, byCanonical.get('five-hour') || null, mode, instance.panelWindowPreference === 'five-hour' || (instance.panelWindowPreference === 'automatic' && selected?.canonicalWindow === 'five-hour'));
-        this._updateWindowCard(this._windowCards.weekly, byCanonical.get('weekly') || null, mode, instance.panelWindowPreference === 'weekly' || (instance.panelWindowPreference === 'automatic' && selected?.canonicalWindow === 'weekly'));
-        this._updateWindowCard(this._windowCards.monthly, byCanonical.get('monthly') || null, mode, instance.panelWindowPreference === 'monthly' || (instance.panelWindowPreference === 'automatic' && selected?.canonicalWindow === 'monthly'));
-        for (const card of Object.values(this._windowCards)) card.root.visible = metadata.quotaWindows.includes(card.canonical);
-        this._updateCredits(snapshot?.resetCredits || null);
-        const metrics = historyMetrics(instance, snapshot, runtime);
-        for (const [card, metric] of [[this._today, metrics.today], [this._month, metrics.month], [this._cost, metrics.cost]]) {
-            card.value.set_text(metric.value);
-            card.unit.set_text(metric.unit);
+        this._identity.setText(instance.displayName, subtitle.join(' · '), refreshStatusText(TRANSLATOR, snapshot, runtime, clockLabel));
+        this._identity.setBusy(runtime !== null && runtime.phase !== 'idle');
+
+        this._error.setText(errorText(TRANSLATOR, snapshot, instance));
+
+        const preference = instance.panelWindowPreference;
+        const automatic = preference === 'automatic' ? selectWindow(snapshot, preference) : null;
+        for (const [canonical, item] of this._windows) {
+            item.visible = metadata.quotaWindows.includes(canonical);
+            if (!item.visible)
+                continue;
+            const window = snapshot?.windows.find(candidate => candidate.canonicalWindow === canonical) ?? null;
+            const selected = preference === canonical || automatic?.canonicalWindow === canonical;
+            item.update(window, mode, selected);
         }
-        if (snapshot?.error) { this._errorText.set_text(`${snapshot.error} ${snapshot.errorInfo?.recovery === 'reauthenticate' ? instance.kind === 'kiro' ? 'Run kiro-cli login.' : 'Run provider login.' : 'Retry when ready.'}`); this._errorRow.show(); } else this._errorRow.hide();
+
+        this._updateCredits(snapshot?.resetCredits ?? null);
+        this._history.setText(historySummary(TRANSLATOR, historyMetrics(instance, snapshot, runtime)));
     }
 
-    _updateWindowCard(card, window, mode, selected) {
-        card.window = window; card.root.set_style_class_name(`tokengrill-window-card${selected ? ' tokengrill-window-selected' : ''}`);
-        card.value.set_text(window ? displayLabel(window, mode) : 'Unavailable'); card.value.set_style_class_name(`tokengrill-window-value tokengrill-pressure-${pressureClass(window)}`);
-        card.reset.set_text(window ? `${quotaValueLabel(window) || formatReset(window.resetAt)} · ${quotaValueLabel(window) ? `${formatReset(window.resetAt)} · ` : ''}resets in ${formatResetCountdown(window.resetAt)}` : 'No active data');
-        card.selected.set_text(selected ? 'TOP BAR' : ''); card.root.set_accessible_name(`${card.canonical} quota window${selected ? ', selected for top bar' : ''}${window ? `, ${displayLabel(window, mode)}` : ', unavailable'}`); card.meter.queue_repaint();
-    }
-
-    _updateCredits(summary) {
-        const supported = Boolean(summary?.supported); this._credits.root.visible = supported; if (!supported) { this._credits.details.hide(); return; }
-        const count = summary.availableCount; this._credits.root._available = count !== null && count > 0;
-        this._credits.value.set_text(count === null ? 'Unavailable' : count === 0 ? 'No resets available' : `${count} reset${count === 1 ? '' : 's'} available`);
-        this._credits.expiry.set_text(summary.stale
-            ? `Cached · checked ${summary.fetchedAt ? formatReset(summary.fetchedAt) : 'unknown'}`
-            : summary.nextExpiresAt ? `Next expires in ${formatResetCountdown(summary.nextExpiresAt)}` : 'Expiry details unavailable');
-        const chevron = this._credits.chevron;
-        chevron.visible = Boolean(this._credits.root._available);
-        this._credits.details.get_children().forEach(child => child.destroy());
-        if (this._credits.root._available && summary.credits?.length && count !== null && count > summary.credits.length) {
-            this._credits.details.add_child(text(`${summary.credits.length} of ${count} expiry dates supplied by the provider`, 'tokengrill-reset-credit-disclaimer'));
+    private _updateCredits(summary: LimitResetCreditSummary | null): void {
+        const count = summary?.availableCount ?? 0;
+        this._credits.visible = summary !== null && count > 0;
+        this._creditsNone.setText(creditsNoneText(summary));
+        if (!summary || count === 0) {
+            this._credits.menu.close();
+            return;
         }
-        if (this._credits.root._available) for (const credit of summary.credits || []) {
-            const row = new St.BoxLayout({vertical: true, style_class: 'tokengrill-reset-credit-row'});
-            row.add_child(text(credit.title || 'Usage-limit reset', 'tokengrill-window-title'));
-            row.add_child(text(credit.expiresAt ? `Expires ${formatReset(credit.expiresAt)} · in ${formatResetCountdown(credit.expiresAt)}` : 'Expiry unavailable', 'tokengrill-secondary')); this._credits.details.add_child(row);
+        this._credits.label.set_text(creditsMenuText(summary, count));
+        this._credits.accessible_name = this._credits.label.text;
+        const key = JSON.stringify([count, summary.stale, summary.fetchedAt, summary.credits]);
+        if (key === this._creditsKey)
+            return;
+        this._creditsKey = key;
+        this._credits.menu.removeAll();
+        const credits = summary.credits;
+        if (credits.length < count) {
+            const note = new InfoItem();
+            if (credits.length)
+                note.setText(_('%d of %d expiry dates supplied by the provider').format(credits.length, count));
+            else
+                note.setText(ngettext('%d usage-limit reset available', '%d usage-limit resets available', count).format(count));
+            this._credits.menu.addMenuItem(note);
         }
-        this._credits.details.visible = Boolean(this._credits.root._expanded && this._credits.root._available);
-    }
-
-    _setSpinning(icon, spinning) {
-        const existing = icon.get_transition?.('tokengrill-spin');
-        if (spinning && !existing && icon.add_transition) {
-            icon.set_pivot_point(0.5, 0.5);
-            const transition = new Clutter.PropertyTransition({property_name: 'rotation-angle-z'});
-            transition.set_from(0); transition.set_to(360); transition.set_duration(900); transition.set_repeat_count(-1);
-            icon.add_transition('tokengrill-spin', transition);
-        } else if (!spinning && existing) {
-            icon.remove_transition('tokengrill-spin'); icon.rotation_angle_z = 0;
+        for (const credit of credits) {
+            const title = credit.title || _('Usage-limit reset');
+            const row = new InfoItem();
+            if (credit.expiresAt)
+                row.setText(_('%s · expires %s (in %s)').format(title, formatTime(new Date(credit.expiresAt)), countdown(credit.expiresAt)));
+            else
+                row.setText(_('%s · expiry unavailable').format(title));
+            this._credits.menu.addMenuItem(row);
         }
     }
-
-    destroy() {
-        if (this._feedbackTimer) {
-            GLib.Source.remove(this._feedbackTimer);
-            this._feedbackTimer = 0;
-        }
-        for (const card of Object.values(this._windowCards || {})) {
-            if (card.selectSignalId) card.root.disconnect(card.selectSignalId);
-            if (card.repaintSignalId) card.meter.disconnect(card.repaintSignalId);
-            card.selectSignalId = 0;
-            card.repaintSignalId = 0;
-        }
-        if (this._credits?.clickSignalId) this._credits.root.disconnect(this._credits.clickSignalId);
-        if (this._credits) this._credits.clickSignalId = 0;
-        this._actions = {};
-        this._instance = null;
-        this._lastSnapshot = null;
-        this._lastRuntime = null;
-        this._windowCards = null;
-        this._credits = null;
-        super.destroy();
-    }
-});
-
-function clockLabel(timestamp) {
-    if (!timestamp) return '—';
-    const date = GLib.DateTime.new_from_unix_local(Math.round(timestamp / 1000));
-    return date ? date.format('%H:%M %Z') : '—';
-}
-
-function ageLabel(timestamp) {
-    if (!timestamp) return 'never';
-    const minutes = Math.max(0, Math.floor((Date.now() - timestamp) / 60000));
-    return minutes < 1 ? 'just now' : minutes < 60 ? `${minutes}m ago` : `${Math.floor(minutes / 60)}h ago`;
-}
-
-
-function quotaValueLabel(window) {
-    if (!window?.unit || !Number.isFinite(window.used)) return '';
-    const used = formatQuotaNumber(window.used);
-    if (!Number.isFinite(window.limit) || window.limit <= 0) return `${used} ${window.unit} used · pooled or unlimited`;
-    return `${used} of ${formatQuotaNumber(window.limit)} ${window.unit} used`;
-}
-
-function formatQuotaNumber(value) {
-    return Number(value).toLocaleString(undefined, {maximumFractionDigits: 6});
 }

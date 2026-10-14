@@ -1,122 +1,217 @@
-// @ts-nocheck
-import Soup from 'gi://Soup';
-import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
-import type {ProviderInstance, ProviderSnapshot} from '../core/types.js';
-import {emptySnapshot} from '../core/types.js';
-import {CollectorError, providerErrorInfo, safeError} from '../core/errors.js';
-import {AggregateStore} from '../storage/aggregateStore.js';
-import {CheckpointStore} from '../storage/checkpointStore.js';
+import GLib from 'gi://GLib';
+import Soup from 'gi://Soup?version=3.0';
+
+import {
+    CollectorError,
+    httpError,
+    INVALID_JSON,
+    NOT_ALLOWED,
+    OFFLINE,
+    providerErrorInfo,
+    serviceErrorReason,
+    TIMED_OUT,
+    TLS_FAILED,
+    TOO_LARGE,
+} from '../core/errors.js';
+import {isCancellation, isIoError} from '../core/gio.js';
+import type {Translator} from '../core/i18n.js';
+import type {ProviderInstance, ProviderSnapshot, RefreshSource, SourceResult, UsageEvent} from '../core/types.js';
 import type {PricingCatalog} from '../pricing/catalog.js';
-import {isCancellation} from '../storage/atomicJson.js';
+import type {AggregateStore} from '../storage/aggregateStore.js';
+import type {CheckpointStore} from '../storage/checkpointStore.js';
+import {scanHistory} from './history.js';
+import {KIRO_SERVICE_HOSTS} from './kiro/endpoints.js';
+
+Gio._promisify(Soup.Session.prototype, 'send_and_read_async', 'send_and_read_finish');
+
+// libsoup applies the session's User-Agent to every request, so this one
+// string names every monitored service: the Antigravity quota API answers 403
+// to clients whose User-Agent does not mention Antigravity.
+export const USER_AGENT = 'TokenGrill (+https://github.com/sh02sahil/token-grill; usage monitor for Codex, Claude, Kiro and Antigravity)';
+
+const MAX_RESPONSE_BYTES = 1024 * 1024;
+const MONTH_MS = 30 * 24 * 60 * 60 * 1000;
+const ALLOWED_HOSTS = new Set([
+    'api.anthropic.com',
+    'chatgpt.com',
+    'cloudcode-pa.googleapis.com',
+    'oauth2.googleapis.com',
+    ...KIRO_SERVICE_HOSTS,
+]);
+const KIRO_OIDC_HOST = /^oidc\.[a-z0-9-]+\.amazonaws\.com$/;
+
+export type RequestJson = (method: string, url: string, headers: Record<string, string>, body?: unknown) => Promise<unknown>;
+export type LimitsUpdate = Partial<Pick<ProviderSnapshot, 'plan' | 'account' | 'windows'>>;
 
 export interface CollectorContext {
     aggregates: AggregateStore;
     checkpoints: CheckpointStore;
-    session: Soup.Session;
     catalog: PricingCatalog;
-    getJson: (session: Soup.Session, url: string, headers: Record<string, string>) => Promise<unknown>;
-    requestJson: (session: Soup.Session, method: string, url: string, headers: Record<string, string>, body?: unknown) => Promise<unknown>;
     cancellable: Gio.Cancellable;
-    onSourcePhase?: (source: 'limits' | 'reset-credits' | 'history') => void;
-    onSourceResult?: (source: 'limits' | 'reset-credits' | 'history', result: 'success' | 'failed') => void;
+    tr: Translator;
+    // True when the user explicitly asked for this refresh.
+    manual: boolean;
+    requestJson: RequestJson;
+    onSourcePhase: (source: RefreshSource) => void;
+    onSourceResult: (source: RefreshSource, result: SourceResult) => void;
 }
 
 export interface ProviderCollector {
-    collect(instance: ProviderInstance, context: CollectorContext, previous: ProviderSnapshot | null): Promise<ProviderSnapshot>;
-    destroy?(): void;
+    collect(instance: ProviderInstance, context: CollectorContext, snapshot: ProviderSnapshot): Promise<ProviderSnapshot>;
+}
+
+function urlAllowed(url: string): boolean {
+    const uri = GLib.Uri.parse(url, GLib.UriFlags.NONE);
+    const host = uri.get_host() ?? '';
+    if (uri.get_scheme() !== 'https' || uri.get_userinfo())
+        return false;
+    return ALLOWED_HOSTS.has(host) || KIRO_OIDC_HOST.test(host);
+}
+
+function networkError(error: unknown): unknown {
+    if (isCancellation(error) || !(error instanceof GLib.Error))
+        return error;
+    if (isIoError(error, Gio.IOErrorEnum.TIMED_OUT))
+        return new CollectorError('timeout', TIMED_OUT);
+    if (error.domain === Gio.tls_error_quark())
+        return new CollectorError('http', TLS_FAILED);
+    return new CollectorError('offline', OFFLINE);
+}
+
+// Every request goes to a fixed service host over HTTPS, without redirects and
+// with a bounded body, so a bad configuration cannot send credentials elsewhere.
+export async function requestJson(
+    session: Soup.Session,
+    method: string,
+    url: string,
+    headers: Record<string, string>,
+    body: unknown,
+    cancellable: Gio.Cancellable
+): Promise<unknown> {
+    if (!urlAllowed(url))
+        throw new CollectorError('http', NOT_ALLOWED);
+    const message = Soup.Message.new(method, url);
+    message.set_flags(Soup.MessageFlags.NO_REDIRECT);
+    const requestHeaders = message.get_request_headers();
+    for (const [name, value] of Object.entries(headers))
+        requestHeaders.append(name, value);
+    if (body !== undefined) {
+        const contentType = headers['Content-Type'] ?? 'application/json';
+        message.set_request_body_from_bytes(contentType, new GLib.Bytes(new TextEncoder().encode(JSON.stringify(body))));
+    }
+
+    // A request of its own lets an oversized response be dropped without cancelling the whole refresh.
+    const request = new Gio.Cancellable();
+    const parentId = cancellable.connect(() => request.cancel());
+    let oversized = false;
+    const headersId = message.connect('got-headers', () => {
+        if (message.get_response_headers().get_content_length() > MAX_RESPONSE_BYTES) {
+            oversized = true;
+            request.cancel();
+        }
+    });
+    let bytes: GLib.Bytes;
+    try {
+        bytes = await session.send_and_read_async(message, GLib.PRIORITY_DEFAULT, request);
+    } catch (error) {
+        throw oversized ? new CollectorError('response-shape', TOO_LARGE) : networkError(error);
+    } finally {
+        message.disconnect(headersId);
+        cancellable.disconnect(parentId);
+    }
+
+    if (bytes.get_size() > MAX_RESPONSE_BYTES)
+        throw new CollectorError('response-shape', TOO_LARGE);
+    const text = new TextDecoder().decode(bytes.toArray());
+    // get_status() returns the Soup.Status enum, and GJS throws for codes it
+    // does not list, such as 429 Too Many Requests.
+    const status = message.status_code;
+    if (status < 200 || status >= 300)
+        throw httpError(status, serviceErrorReason(text));
+    if (!text)
+        return null;
+    try {
+        return JSON.parse(text);
+    } catch {
+        throw new CollectorError('response-shape', INVALID_JSON);
+    }
+}
+
+function startOfUtcDay(): number {
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    return today.getTime();
+}
+
+function historyError(error: unknown): unknown {
+    if (isCancellation(error) || !(error instanceof GLib.Error))
+        return error;
+    return new CollectorError('local-history', ({_}) => _('The local usage history could not be updated.'));
 }
 
 export abstract class BaseCollector implements ProviderCollector {
-    abstract collect(instance: ProviderInstance, context: CollectorContext, previous: ProviderSnapshot | null): Promise<ProviderSnapshot>;
+    abstract collect(instance: ProviderInstance, context: CollectorContext, snapshot: ProviderSnapshot): Promise<ProviderSnapshot>;
 
-    protected failed(instance: ProviderInstance, previous: ProviderSnapshot | null, error: unknown): ProviderSnapshot {
-        if (isCancellation(error)) throw error;
-        const snapshot = previous ? {...previous} : emptySnapshot(instance.id);
-        snapshot.state = snapshot.lastUpdated ? 'stale' : 'error';
-        snapshot.error = safeError(error);
-        snapshot.errorInfo = providerErrorInfo(error);
-        return snapshot;
+    // Expected failures keep the last known values, marked stale; anything else is a bug and propagates.
+    protected failed(snapshot: ProviderSnapshot, error: unknown, tr: Translator): ProviderSnapshot {
+        if (!(error instanceof CollectorError))
+            throw error;
+        const errorInfo = providerErrorInfo(error, tr);
+        return {...snapshot, state: snapshot.lastUpdated ? 'stale' : 'error', error: errorInfo.message, errorInfo};
     }
 
-    protected async getJson(session: Soup.Session, url: string, headers: Record<string, string>): Promise<unknown> {
-        return getJson(session, url, headers);
+    protected limitsReady(context: CollectorContext, snapshot: ProviderSnapshot, update: LimitsUpdate): ProviderSnapshot {
+        context.onSourceResult('limits', 'success');
+        const now = Date.now();
+        return {...snapshot, ...update, state: 'ready', lastUpdated: now, quotaFetchedAt: now, error: null, errorInfo: null};
     }
-}
 
-export async function getJson(session: Soup.Session, url: string, headers: Record<string, string>, cancellable: Gio.Cancellable | null = null): Promise<unknown> {
-    return requestJson(session, 'GET', url, headers, undefined, cancellable);
-}
+    protected limitsFailed(context: CollectorContext, snapshot: ProviderSnapshot, error: unknown): ProviderSnapshot {
+        context.onSourceResult('limits', 'failed');
+        return this.failed(snapshot, error, context.tr);
+    }
 
-export async function requestJson(session: Soup.Session, method: string, url: string, headers: Record<string, string>, requestBody?: unknown, parentCancellable: Gio.Cancellable | null = null): Promise<unknown> {
-        if (!providerUrlAllowed(url)) throw new CollectorError('The provider request destination is not allowed.', 'http');
-        const message = Soup.Message.new(method, url);
-        if (!message) throw new CollectorError('Could not create the provider request.');
-        message.set_flags(message.get_flags() | Soup.MessageFlags.NO_REDIRECT);
-        const requestHeaders = message.get_request_headers();
-        for (const [key, value] of Object.entries(headers)) requestHeaders.append(key, value);
-        if (!headers['User-Agent'] && !headers['user-agent']) requestHeaders.append('User-Agent', 'TokenGrill/0.1');
-        if (requestBody !== undefined) {
-            const encoded = new TextEncoder().encode(JSON.stringify(requestBody));
-            message.set_request_body_from_bytes(headers['Content-Type'] || headers['content-type'] || 'application/json', new GLib.Bytes(encoded));
-        }
-        let bytes;
-        let oversized = false;
-        const cancellable = new Gio.Cancellable();
-        const parentCancelId = parentCancellable?.connect(() => cancellable.cancel()) || 0;
-        if (parentCancellable?.is_cancelled()) cancellable.cancel();
-        const headersId = message.connect('got-headers', () => {
-            const length = message.get_response_headers().get_content_length();
-            if (length > MAX_RESPONSE_BYTES) {
-                oversized = true;
-                cancellable.cancel();
-            }
-        });
+    protected async collectLimits(
+        context: CollectorContext,
+        snapshot: ProviderSnapshot,
+        fetch: () => Promise<LimitsUpdate>
+    ): Promise<ProviderSnapshot> {
+        let update: LimitsUpdate;
         try {
-            bytes = await session.send_and_read_async(message, 0, cancellable);
+            update = await fetch();
         } catch (error) {
-            if (parentCancellable?.is_cancelled()) throw error;
-            if (oversized) throw new CollectorError('The provider response was too large.', 'response-shape');
-            if (isCancellation(error)) throw error;
-            const detail = error instanceof Error ? error.message : String(error);
-            if (/timed?\s*out|timeout/i.test(detail)) throw new CollectorError('The provider request timed out.', 'timeout');
-            throw new CollectorError('The provider service could not be reached.', 'offline');
-        } finally {
-            if (headersId) message.disconnect(headersId);
-            if (parentCancelId) parentCancellable?.disconnect(parentCancelId);
+            return this.limitsFailed(context, snapshot, error);
         }
-        const bodyBytes = bytes?.toArray?.() ?? bytes?.get_data?.() ?? [];
-        if (bodyBytes.length > MAX_RESPONSE_BYTES) throw new CollectorError('The provider response was too large.', 'response-shape');
-        const body = new TextDecoder().decode(bodyBytes);
-        if (message.status_code < 200 || message.status_code >= 300) {
-            const code = message.status_code === 401 || message.status_code === 403 ? 'auth' : message.status_code === 429 ? 'rate-limit' : 'http';
-            throw new CollectorError(`Provider request failed (HTTP ${message.status_code}).`, code);
+        return this.limitsReady(context, snapshot, update);
+    }
+
+    protected async collectHistory(
+        instance: ProviderInstance,
+        context: CollectorContext,
+        snapshot: ProviderSnapshot,
+        parseLine: (line: string) => UsageEvent | null
+    ): Promise<ProviderSnapshot> {
+        const {aggregates, checkpoints, catalog} = context;
+        context.onSourcePhase('history');
+        try {
+            await scanHistory(instance, parseLine, aggregates, checkpoints, context.cancellable);
+            await Promise.all([aggregates.flush(), checkpoints.flush()]);
+        } catch (error) {
+            context.onSourceResult('history', 'failed');
+            return this.failed(snapshot, historyError(error), context.tr);
         }
-        let payload: unknown = null;
-        try { payload = body ? JSON.parse(body) : null; } catch { throw new CollectorError('The provider returned invalid JSON.', 'response-shape'); }
-        return payload;
-}
-
-const MAX_RESPONSE_BYTES = 1024 * 1024;
-const FIXED_PROVIDER_HOSTS = new Set([
-    'chatgpt.com',
-    'api.anthropic.com',
-    'codewhisperer.us-east-1.amazonaws.com',
-    'q.eu-central-1.amazonaws.com',
-    'cloudcode-pa.googleapis.com',
-    'oauth2.googleapis.com',
-]);
-
-export function providerUrlAllowed(url: string): boolean {
-    try {
-        const uri = GLib.Uri.parse(url, GLib.UriFlags.NONE);
-        const host = uri.get_host() || '';
-        if (uri.get_scheme() !== 'https' || uri.get_userinfo() || !host) return false;
-        return FIXED_PROVIDER_HOSTS.has(host) ||
-            /^oidc\.[a-z0-9-]+\.amazonaws\.com$/.test(host) ||
-            /^q\.us-gov-(east|west)-1\.amazonaws\.com$/.test(host) ||
-            ['q.us-iso-east-1.c2s.ic.gov', 'q.us-isob-east-1.sc2s.sgov.gov', 'q.us-isof-south-1.csp.hci.ic.gov', 'q.us-isof-east-1.csp.hci.ic.gov'].includes(host);
-    } catch {
-        return false;
+        context.onSourceResult('history', 'success');
+        const today = startOfUtcDay();
+        const monthStart = Date.now() - MONTH_MS;
+        return {
+            ...snapshot,
+            totals: aggregates.totals(instance.id, 0),
+            todayTotals: aggregates.totals(instance.id, today),
+            monthTotals: aggregates.totals(instance.id, monthStart),
+            todayCost: aggregates.cost(instance.id, today, catalog),
+            monthCost: aggregates.cost(instance.id, monthStart, catalog),
+            localHistoryUpdatedAt: Date.now(),
+        };
     }
 }

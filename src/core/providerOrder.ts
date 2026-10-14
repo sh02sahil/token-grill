@@ -13,12 +13,14 @@ export function reorderProviders(providers: ProviderInstance[], orderedIds: stri
     const reordered: ProviderInstance[] = [];
     for (const id of orderedIds) {
         const provider = byId.get(id);
-        if (!provider || seen.has(id)) continue;
+        if (!provider || seen.has(id))
+            continue;
         reordered.push(provider);
         seen.add(id);
     }
     for (const provider of orderedProviders(providers)) {
-        if (seen.has(provider.id)) continue;
+        if (seen.has(provider.id))
+            continue;
         reordered.push(provider);
         seen.add(provider.id);
     }

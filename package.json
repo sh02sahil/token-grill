@@ -1,29 +1,31 @@
 {
-  "name": "token-grill",
-  "version": "0.2.0",
-  "private": true,
-  "description": "A lightweight multi-account AI usage indicator for GNOME Shell.",
-  "type": "module",
-  "scripts": {
-    "build": "node tools/build.mjs",
-    "check": "tsc --noEmit && eslint .",
-    "test": "node tools/test-build.mjs && node --test tests/unit/*.test.mjs",
-    "test:kiro-gda": "gjs -m tools/kiro-gda-readonly-test.js",
-    "test:kiro-live": "gjs -m tools/kiro-live-smoke.js",
-    "test:antigravity-live": "gjs -m tools/antigravity-live-smoke.js",
-    "install:local": "node tools/install.mjs",
-    "dev:shell": "bash tools/nested-shell.sh",
-    "pack": "node tools/pack.mjs",
-    "release:check": "node tools/release-check.mjs",
-    "review:check": "npm run pack && node tools/shexli-check.mjs"
-  },
-  "devDependencies": {
-    "@girs/gjs": "^4.0.0",
-    "@girs/gnome-shell": "^49.0.0",
-    "@types/node": "^22.0.0",
-    "esbuild": "^0.28.2",
-    "eslint": "^9.0.0",
-    "typescript": "^5.7.0",
-    "typescript-eslint": "^8.66.0"
-  }
+    "name": "token-grill",
+    "version": "0.3.0",
+    "private": true,
+    "description": "A lightweight multi-account AI usage indicator for GNOME Shell.",
+    "type": "module",
+    "scripts": {
+        "build": "node tools/build.mjs",
+        "check": "tsc --noEmit && eslint src tools tests eslint.config.js",
+        "test": "node tools/test-build.mjs && node --test tests/unit/*.test.mjs",
+        "test:kiro-gda": "npm run build && gjs -m tools/kiro-gda-test.js",
+        "test:live": "npm run build && gjs -m tools/live-smoke.js",
+        "install:local": "node tools/install.mjs",
+        "dev:shell": "bash tools/nested-shell.sh",
+        "pack": "node tools/pack.mjs",
+        "release:check": "node tools/release-check.mjs",
+        "review:check": "npm run pack && node tools/shexli-check.mjs"
+    },
+    "devDependencies": {
+        "@girs/gda-5.0": "^4.1.0",
+        "@girs/gjs": "^4.9.0",
+        "@girs/gnome-shell": "^50.0.4",
+        "@girs/secret-1": "^4.1.0",
+        "@girs/soup-3.0": "^4.1.0",
+        "esbuild": "^0.28.2",
+        "eslint": "^9.0.0",
+        "eslint-config-gnome": "git+https://gitlab.gnome.org/World/javascript/eslint-config-gnome.git#c479d059e8d9ea99c3b53c2ea43abf7fdb05eb51",
+        "typescript": "^5.7.0",
+        "typescript-eslint": "^8.66.0"
+    }
 }

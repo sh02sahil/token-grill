@@ -1,38 +1,53 @@
+import type Gio from 'gi://Gio';
+
 import type {FileCheckpoint} from '../core/types.js';
-import Gio from 'gi://Gio';
-import {readJson, statePath, writeJsonAtomic} from './atomicJson.js';
+import {readJson, SerialWriter, statePath, type WarningLogger} from './atomicJson.js';
 
-interface CheckpointFile {schemaVersion: 1; files: FileCheckpoint[]}
+interface CheckpointFile {
+    schemaVersion: 1;
+    files: FileCheckpoint[];
+}
 
+function checkpointKey(providerId: string, path: string): string {
+    return JSON.stringify([providerId, path]);
+}
+
+// How far each history file has been read, so the next pass continues from there.
 export class CheckpointStore {
-    private readonly path = statePath('checkpoints-v1.json');
-    private data: CheckpointFile = {schemaVersion: 1, files: []};
-    private writeChain: Promise<void> = Promise.resolve();
+    private readonly _writer = new SerialWriter(statePath('checkpoints-v1.json'));
+    private readonly _files = new Map<string, FileCheckpoint>();
 
-    async initialize(cancellable: Gio.Cancellable | null = null): Promise<void> {
-        this.data = await readJson<CheckpointFile>(this.path, {schemaVersion: 1, files: []}, cancellable);
+    private readonly _logger: WarningLogger;
+
+    constructor(logger: WarningLogger) {
+        this._logger = logger;
+    }
+
+    async initialize(cancellable: Gio.Cancellable): Promise<void> {
+        const file = await readJson<CheckpointFile>(this._writer.path, {schemaVersion: 1, files: []}, cancellable, this._logger);
+        for (const checkpoint of Array.isArray(file.files) ? file.files : [])
+            this._files.set(checkpointKey(checkpoint.providerId, checkpoint.path), checkpoint);
     }
 
     get(providerId: string, path: string): FileCheckpoint | null {
-        return this.data.files.find(item => item.providerId === providerId && item.path === path) ?? null;
+        return this._files.get(checkpointKey(providerId, path)) ?? null;
     }
 
     set(checkpoint: FileCheckpoint): void {
-        const index = this.data.files.findIndex(item => item.providerId === checkpoint.providerId && item.path === checkpoint.path);
-        if (index >= 0) this.data.files[index] = checkpoint;
-        else this.data.files.push(checkpoint);
-        this.persist();
+        this._files.set(checkpointKey(checkpoint.providerId, checkpoint.path), checkpoint);
+        this._writer.markDirty();
     }
 
-    removeProvider(providerId: string): void {
-        this.data.files.splice(0, this.data.files.length, ...this.data.files.filter(item => item.providerId !== providerId));
-        this.persist();
+    removeProvider(providerId: string): Promise<void> {
+        for (const [key, checkpoint] of this._files) {
+            if (checkpoint.providerId === providerId)
+                this._files.delete(key);
+        }
+        this._writer.markDirty();
+        return this.flush();
     }
 
-    private persist(): void {
-        const snapshot = JSON.parse(JSON.stringify(this.data)) as CheckpointFile;
-        this.writeChain = this.writeChain.then(() => writeJsonAtomic(this.path, snapshot)).catch(() => {});
+    flush(): Promise<void> {
+        return this._writer.flush(() => ({schemaVersion: 1, files: [...this._files.values()]}));
     }
-
-    flush(): Promise<void> { return this.writeChain; }
 }

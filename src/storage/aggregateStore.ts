@@ -1,11 +1,14 @@
-import type {AggregateBucket, TokenTotals, UsageEvent} from '../core/types.js';
-import {EMPTY_TOTALS} from '../core/types.js';
-import Gio from 'gi://Gio';
-import {dataPath, readJson, writeJsonAtomic} from './atomicJson.js';
+import type Gio from 'gi://Gio';
+
+import {EMPTY_TOTALS, type AggregateBucket, type TokenTotals, type UsageEvent} from '../core/types.js';
 import {costFor} from '../pricing/calculator.js';
 import type {PricingCatalog} from '../pricing/catalog.js';
+import {dataPath, readJson, SerialWriter, type WarningLogger} from './atomicJson.js';
 
-interface AggregateFile {schemaVersion: 1; buckets: AggregateBucket[]}
+interface AggregateFile {
+    schemaVersion: 1;
+    buckets: AggregateBucket[];
+}
 
 function addTotals(a: TokenTotals, b: TokenTotals): TokenTotals {
     return {
@@ -18,71 +21,73 @@ function addTotals(a: TokenTotals, b: TokenTotals): TokenTotals {
     };
 }
 
+function bucketKey(providerId: string, date: string, model: string): string {
+    return JSON.stringify([providerId, date, model]);
+}
+
+function bucketStartMs(bucket: AggregateBucket): number {
+    return Date.parse(`${bucket.date}T00:00:00Z`);
+}
+
+// Daily token totals per account and model, kept so history files are only read once.
 export class AggregateStore {
-    private readonly path = dataPath('history-v1.json');
-    private data: AggregateFile = {schemaVersion: 1, buckets: []};
-    private dirty = false;
-    private writeChain: Promise<void> = Promise.resolve();
+    private readonly _writer = new SerialWriter(dataPath('history-v1.json'));
+    private readonly _buckets = new Map<string, AggregateBucket>();
 
-    async initialize(cancellable: Gio.Cancellable | null = null): Promise<void> {
-        this.data = await readJson<AggregateFile>(this.path, {schemaVersion: 1, buckets: []}, cancellable);
+    private readonly _logger: WarningLogger;
+
+    constructor(logger: WarningLogger) {
+        this._logger = logger;
     }
 
-    add(event: UsageEvent): void {
+    async initialize(cancellable: Gio.Cancellable): Promise<void> {
+        const file = await readJson<AggregateFile>(this._writer.path, {schemaVersion: 1, buckets: []}, cancellable, this._logger);
+        // The file is ours, but a damaged one must not stop the extension from starting.
+        for (const {providerId, date, model, totals} of Array.isArray(file.buckets) ? file.buckets : [])
+            this._buckets.set(bucketKey(providerId, date, model), {providerId, date, model, totals});
+    }
+
+    add(providerId: string, event: UsageEvent): void {
         const date = new Date(event.capturedAt).toISOString().slice(0, 10);
-        const model = event.model || 'unknown';
-        let bucket = this.data.buckets.find(item => item.providerId === event.providerId && item.date === date && item.model === model);
-        if (!bucket) {
-            bucket = {providerId: event.providerId, date, model, totals: {...EMPTY_TOTALS}, events: 0, sourceBytes: {}};
-            this.data.buckets.push(bucket);
-        }
-        bucket.totals = addTotals(bucket.totals, event.totals);
-        bucket.events += 1;
-        bucket.sourceBytes[event.source] = (bucket.sourceBytes[event.source] || 0) + (event.totals.total || 0);
-        this.dirty = true;
+        const model = event.model ?? 'unknown';
+        const key = bucketKey(providerId, date, model);
+        const bucket = this._buckets.get(key) ?? {providerId, date, model, totals: EMPTY_TOTALS};
+        this._buckets.set(key, {...bucket, totals: addTotals(bucket.totals, event.totals)});
+        this._writer.markDirty();
     }
 
-    totals(providerId: string, sinceMs = 0): TokenTotals {
-        return this.data.buckets.filter(item => item.providerId === providerId && Date.parse(`${item.date}T00:00:00Z`) >= sinceMs)
-            .reduce((sum, item) => addTotals(sum, item.totals), {...EMPTY_TOTALS});
+    totals(providerId: string, sinceMs: number): TokenTotals {
+        let sum = EMPTY_TOTALS;
+        for (const bucket of this._bucketsSince(providerId, sinceMs))
+            sum = addTotals(sum, bucket.totals);
+        return sum;
     }
 
-    today(providerId: string): TokenTotals {
-        const midnight = Date.parse(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
-        return this.totals(providerId, midnight);
-    }
-
+    // Null when no model in the range has a known price.
     cost(providerId: string, sinceMs: number, catalog: PricingCatalog): number | null {
-        const buckets = this.data.buckets.filter(item => item.providerId === providerId && Date.parse(`${item.date}T00:00:00Z`) >= sinceMs);
-        let total = 0;
-        let priced = false;
-        for (const bucket of buckets) {
-            const value = costFor(bucket.totals, catalog[bucket.model] || null);
-            if (value === null) continue;
-            priced = true;
-            total += value;
+        let total: number | null = null;
+        for (const bucket of this._bucketsSince(providerId, sinceMs)) {
+            const rate = catalog[bucket.model];
+            if (rate)
+                total = (total ?? 0) + costFor(bucket.totals, rate);
         }
-        return priced ? total : null;
+        return total;
     }
 
-    prune(days: number): void {
-        const cutoff = Date.now() - days * 86400000;
-        this.data.buckets = this.data.buckets.filter(item => Date.parse(`${item.date}T00:00:00Z`) >= cutoff);
-        this.dirty = true;
-    }
-
-    removeProvider(providerId: string): void {
-        this.data.buckets = this.data.buckets.filter(item => item.providerId !== providerId);
-        this.dirty = true;
-        void this.flush();
-    }
-
-    async flush(): Promise<void> {
-        if (this.dirty) {
-            this.dirty = false;
-            const snapshot = JSON.parse(JSON.stringify(this.data)) as AggregateFile;
-            this.writeChain = this.writeChain.then(() => writeJsonAtomic(this.path, snapshot)).catch(() => {});
+    removeProvider(providerId: string): Promise<void> {
+        for (const [key, bucket] of this._buckets) {
+            if (bucket.providerId === providerId)
+                this._buckets.delete(key);
         }
-        await this.writeChain;
+        this._writer.markDirty();
+        return this.flush();
+    }
+
+    flush(): Promise<void> {
+        return this._writer.flush(() => ({schemaVersion: 1, buckets: [...this._buckets.values()]}));
+    }
+
+    private _bucketsSince(providerId: string, sinceMs: number): AggregateBucket[] {
+        return [...this._buckets.values()].filter(bucket => bucket.providerId === providerId && bucketStartMs(bucket) >= sinceMs);
     }
 }

@@ -24,33 +24,29 @@ for (const target of targets) {
         failed = true;
         continue;
     }
-    if (result.status !== 0) {
-        console.error(`${label}: Shexli exited with status ${result.status}.`);
-        if (result.stderr.trim()) console.error(result.stderr.trim());
-        failed = true;
-        continue;
-    }
+    // Shexli 0.2.1 always exits 0, so the JSON summary is the only verdict.
     let report;
     try {
         report = JSON.parse(result.stdout);
     } catch {
         console.error(`${label}: Shexli did not return valid JSON.`);
-        if (result.stdout.trim()) console.error(result.stdout.trim());
+        console.error(result.stderr.trim() || result.stdout.trim());
         failed = true;
         continue;
     }
-    const findingCount = report.finding_count ?? report.summary?.finding_count;
+    const findingCount = report.summary.finding_count;
     if (!Number.isInteger(findingCount)) {
         console.error(`${label}: Shexli JSON did not contain finding_count.`);
         failed = true;
     } else if (findingCount > 0) {
         console.error(`${label}: ${findingCount} Shexli finding${findingCount === 1 ? '' : 's'}.`);
-        for (const finding of report.findings || [])
-            console.error(`  ${finding.code || finding.rule_id || 'unknown'}: ${finding.message || finding.title || 'review finding'}`);
+        for (const finding of report.findings)
+            console.error(`  ${finding.rule_id}: ${finding.message}`);
         failed = true;
     } else {
         console.log(`${label}: Shexli review clean.`);
     }
 }
 
-if (failed) process.exitCode = 1;
+if (failed)
+    process.exitCode = 1;

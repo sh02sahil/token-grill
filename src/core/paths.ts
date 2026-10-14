@@ -1,6 +1,31 @@
-import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
+
 import type {ProviderInstance, ProviderKind, ProviderPaths} from './types.js';
+
+const DEFAULT_HOMES: Record<ProviderKind, string[]> = {
+    codex: ['.codex'],
+    claude: ['.claude'],
+    kiro: [],
+    antigravity: ['.gemini', 'antigravity-cli'],
+};
+
+// Antigravity tools have written their OAuth credentials under each of these names.
+const ANTIGRAVITY_AUTH_FILES = ['acp_token.json', 'oauth_creds.json', 'credentials.json'];
+
+const AUTH_FILES: Record<ProviderKind, string> = {
+    codex: 'auth.json',
+    claude: '.credentials.json',
+    kiro: 'data.sqlite3',
+    antigravity: 'acp_token.json',
+};
+
+const HISTORY_DIRECTORIES: Record<ProviderKind, string[]> = {
+    codex: ['sessions', 'archived_sessions'],
+    claude: ['projects'],
+    kiro: [],
+    antigravity: [],
+};
 
 export function expandPath(value: string): string {
     const trimmed = value.trim();
@@ -15,50 +40,40 @@ export function expandPath(value: string): string {
 
 export function displayPath(value: string): string {
     const home = GLib.get_home_dir();
-    return value === home ? '~' : value.startsWith(`${home}/`) ? `~/${value.slice(home.length + 1)}` : value;
-}
-
-export function providerPaths(instance: ProviderInstance): ProviderPaths {
-    const home = expandPath(instance.accountHome);
-    const authFile = instance.authFileOverride ? expandPath(instance.authFileOverride) :
-        instance.kind === 'antigravity' ?
-            (pathExists(GLib.build_filenamev([home, 'acp_token.json'])) ? GLib.build_filenamev([home, 'acp_token.json']) :
-             pathExists(GLib.build_filenamev([home, 'oauth_creds.json'])) ? GLib.build_filenamev([home, 'oauth_creds.json']) :
-             pathExists(GLib.build_filenamev([home, 'credentials.json'])) ? GLib.build_filenamev([home, 'credentials.json']) :
-             GLib.build_filenamev([home, 'acp_token.json'])) :
-        GLib.build_filenamev([home, instance.kind === 'codex' ? 'auth.json' : instance.kind === 'claude' ? '.credentials.json' : 'data.sqlite3']);
-    const sessionsDirectory = instance.sessionsDirectoryOverride ? expandPath(instance.sessionsDirectoryOverride) :
-        instance.kind === 'kiro' ? GLib.build_filenamev([GLib.get_home_dir(), '.kiro', 'sessions']) :
-        instance.kind === 'antigravity' ? GLib.build_filenamev([home, 'conversations']) :
-            GLib.build_filenamev([home, instance.kind === 'codex' ? 'sessions' : 'projects']);
-    const archivedSessionsDirectory = (instance.kind === 'kiro' || instance.kind === 'antigravity') ? sessionsDirectory : GLib.build_filenamev([home, 'archived_sessions']);
-    const configFile = instance.kind === 'kiro' ? GLib.build_filenamev([GLib.get_home_dir(), '.kiro', 'settings', 'cli.json']) :
-        instance.kind === 'antigravity' ? GLib.build_filenamev([home, 'settings.json']) :
-        GLib.build_filenamev([home, instance.kind === 'codex' ? 'config.toml' : 'config.json']);
-    return {authFile, sessionsDirectory, archivedSessionsDirectory, configFile};
-}
-
-export function pathExists(path: string): boolean {
-    return Gio.File.new_for_path(path).query_exists(null);
-}
-
-export function isDirectory(path: string): boolean {
-    try {
-        const info = Gio.File.new_for_path(path).query_info('standard::type', Gio.FileQueryInfoFlags.NONE, null);
-        return info.get_file_type() === Gio.FileType.DIRECTORY;
-    } catch {
-        return false;
-    }
+    if (value === home)
+        return '~';
+    if (value.startsWith(`${home}/`))
+        return `~/${value.slice(home.length + 1)}`;
+    return value;
 }
 
 export function defaultHome(kind: ProviderKind): string {
-    if (kind === 'kiro') return GLib.build_filenamev([GLib.get_user_data_dir(), 'kiro-cli']);
-    if (kind === 'antigravity') {
-        const geminiAntigravity = GLib.build_filenamev([GLib.get_home_dir(), '.gemini', 'antigravity']);
-        if (pathExists(geminiAntigravity)) return geminiAntigravity;
-        const dotAntigravity = GLib.build_filenamev([GLib.get_home_dir(), '.antigravity']);
-        if (pathExists(dotAntigravity)) return dotAntigravity;
-        return GLib.build_filenamev([GLib.get_home_dir(), '.antigravity']);
-    }
-    return GLib.build_filenamev([GLib.get_home_dir(), kind === 'codex' ? '.codex' : '.claude']);
+    if (kind === 'kiro')
+        return GLib.build_filenamev([GLib.get_user_data_dir(), 'kiro-cli']);
+    return GLib.build_filenamev([GLib.get_home_dir(), ...DEFAULT_HOMES[kind]]);
+}
+
+// Normalized providers always hold valid paths, so this never throws for them.
+export function providerPaths(instance: ProviderInstance): ProviderPaths {
+    const home = expandPath(instance.accountHome);
+    const authFile = instance.authFileOverride
+        ? expandPath(instance.authFileOverride)
+        : GLib.build_filenamev([home, AUTH_FILES[instance.kind]]);
+    const historyDirectories = instance.sessionsDirectoryOverride
+        ? [expandPath(instance.sessionsDirectoryOverride)]
+        : HISTORY_DIRECTORIES[instance.kind].map(name => GLib.build_filenamev([home, name]));
+    return {authFile, historyDirectories};
+}
+
+// The files tried for an account's credentials, in order of preference.
+export function authFileCandidates(instance: ProviderInstance): string[] {
+    if (instance.kind !== 'antigravity' || instance.authFileOverride)
+        return [providerPaths(instance).authFile];
+    const home = expandPath(instance.accountHome);
+    return ANTIGRAVITY_AUTH_FILES.map(name => GLib.build_filenamev([home, name]));
+}
+
+// Preferences process only: a small, user-triggered synchronous check (PR-9).
+export function pathExists(path: string): boolean {
+    return Gio.File.new_for_path(path).query_exists(null);
 }

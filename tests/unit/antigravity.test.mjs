@@ -1,119 +1,153 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  GOOGLE_OAUTH_TOKEN_URL,
-  LOAD_CODE_ASSIST_ENDPOINT,
-  FETCH_AVAILABLE_MODELS_ENDPOINT,
-} from '../../build/tests/antigravity-endpoints.mjs';
+import {GOOGLE_OAUTH_TOKEN_URL, LOAD_CODE_ASSIST_URL, RETRIEVE_USER_QUOTA_SUMMARY_URL} from '../../build/tests/antigravity-endpoints.mjs';
 import {providerIconFile, providerMetadata} from '../../build/tests/provider-metadata.mjs';
-import {
-  extractModelQuotaBuckets,
-  normalizeAntigravityUsage,
-} from '../../build/tests/antigravity-normalize.mjs';
+import {antigravityPlan, extractQuotaSummaryBuckets, normalizeQuotaSummary} from '../../build/tests/antigravity-normalize.mjs';
+import {AGY_KEYRING_ATTRIBUTES, AGY_KEYRING_SCHEMA, parseAgyKeyringPayload} from '../../build/tests/antigravity-keyring-payload.mjs';
 
 test('Antigravity metadata defines five-hour and weekly live quota windows', () => {
-  const metadata = providerMetadata('antigravity');
-  assert.equal(metadata.label, 'Antigravity');
-  assert.equal(metadata.defaultAccent, 'cyan');
-  assert.equal(metadata.defaultQuotaWindow, 'automatic');
-  assert.deepEqual(metadata.quotaWindows, ['five-hour', 'weekly']);
-  assert.equal(metadata.localHistorySupported, false);
-  assert.equal(providerIconFile('antigravity'), 'antigravity-mark-light.svg');
-  assert.equal(providerIconFile('antigravity', 'dark'), 'antigravity-mark-dark.svg');
+    const metadata = providerMetadata('antigravity');
+    assert.equal(metadata.label, 'Antigravity');
+    assert.equal(metadata.defaultAccent, 'teal');
+    assert.equal(metadata.defaultQuotaWindow, 'automatic');
+    assert.deepEqual(metadata.quotaWindows, ['five-hour', 'weekly']);
+    assert.equal(metadata.localHistorySupported, false);
+    assert.equal(providerIconFile('antigravity'), 'antigravity-symbolic.svg');
 });
 
-test('Antigravity request endpoints point to official Google Cloud Code APIs', () => {
-  assert.equal(GOOGLE_OAUTH_TOKEN_URL, 'https://oauth2.googleapis.com/token');
-  assert.equal(LOAD_CODE_ASSIST_ENDPOINT, 'https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist');
-  assert.equal(FETCH_AVAILABLE_MODELS_ENDPOINT, 'https://cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels');
+test('Antigravity request endpoints point to the Google Cloud Code APIs', () => {
+    assert.equal(GOOGLE_OAUTH_TOKEN_URL, 'https://oauth2.googleapis.com/token');
+    assert.equal(LOAD_CODE_ASSIST_URL, 'https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist');
+    assert.equal(RETRIEVE_USER_QUOTA_SUMMARY_URL, 'https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary');
 });
 
-test('Antigravity model quota extraction parses remaining fractions and reset times', () => {
-  const payload = {
-    models: {
-      'gemini-2.5-pro': {
-        displayName: 'Gemini 2.5 Pro',
-        quotaInfo: {
-          remainingFraction: 0.85,
-          resetTime: '2026-03-09T22:00:00Z',
-        },
-      },
-      'claude-3-7-sonnet': {
-        displayName: 'Claude 3.7 Sonnet',
-        quotaInfo: {
-          remainingFraction: 0.60,
-          resetTime: '2026-03-16T12:00:00Z',
-        },
-      },
-    },
-  };
-
-  const buckets = extractModelQuotaBuckets(payload);
-  assert.equal(buckets.length, 2);
-
-  const gemini = buckets.find(b => b.id === 'gemini-2.5-pro');
-  assert.ok(gemini);
-  assert.equal(gemini.displayName, 'Gemini 2.5 Pro');
-  assert.equal(gemini.remainingFraction, 0.85);
-  assert.equal(gemini.resetTime, '2026-03-09T22:00:00Z');
-
-  const claude = buckets.find(b => b.id === 'claude-3-7-sonnet');
-  assert.ok(claude);
-  assert.equal(claude.displayName, 'Claude 3.7 Sonnet');
-  assert.equal(claude.remainingFraction, 0.60);
+test('Antigravity plan comes from the current tier only', () => {
+    assert.equal(antigravityPlan({currentTier: {id: 'standard-tier', name: 'Antigravity Pro'}}), 'Antigravity Pro');
+    assert.equal(antigravityPlan({allowedTiers: [], ineligibleTiers: []}), null);
+    assert.equal(antigravityPlan(null), null);
 });
 
-test('Antigravity usage maps Gemini to five-hour and Claude/GPT to weekly canonical windows', () => {
-  const codeAssistPayload = {
-    currentTier: {
-      id: 'free-tier',
-      name: 'Antigravity Pro',
-    },
-  };
-
-  const modelsPayload = {
-    models: {
-      'gemini-2.5-flash': {
-        displayName: 'Gemini 2.5 Flash',
-        quotaInfo: {
-          remainingFraction: 0.75,
-          resetTime: '2026-03-09T20:00:00Z',
-        },
-      },
-      'claude-3-5-sonnet': {
-        displayName: 'Claude 3.5 Sonnet',
-        quotaInfo: {
-          remainingFraction: 0.40,
-          resetTime: '2026-03-15T00:00:00Z',
-        },
-      },
-    },
-  };
-
-  const result = normalizeAntigravityUsage(codeAssistPayload, modelsPayload);
-  assert.equal(result.plan, 'Antigravity Pro');
-  assert.equal(result.windows.length, 2);
-
-  const fiveHour = result.windows.find(w => w.canonicalWindow === 'five-hour');
-  assert.ok(fiveHour);
-  assert.match(fiveHour.label, /Gemini/);
-  assert.equal(Math.round(fiveHour.percent * 100), 25);
-  assert.equal(fiveHour.windowSeconds, 5 * 3600);
-  assert.equal(fiveHour.resetAt, Date.parse('2026-03-09T20:00:00Z'));
-
-  const weekly = result.windows.find(w => w.canonicalWindow === 'weekly');
-  assert.ok(weekly);
-  assert.match(weekly.label, /Claude/);
-  assert.equal(Math.round(weekly.percent * 100), 60);
-  assert.equal(weekly.windowSeconds, 7 * 86400);
-  assert.equal(weekly.resetAt, Date.parse('2026-03-15T00:00:00Z'));
+test('Antigravity CLI keyring entry is addressed by the go-keyring attribute pair', () => {
+    assert.deepEqual(AGY_KEYRING_ATTRIBUTES, {service: 'gemini', username: 'antigravity'});
+    assert.equal(AGY_KEYRING_SCHEMA, 'org.freedesktop.Secret.Generic');
 });
 
-test('Antigravity normalization safely handles empty or unexpected payloads', () => {
-  const emptyResult = normalizeAntigravityUsage(null, null);
-  assert.equal(emptyResult.plan, 'Antigravity');
-  assert.deepEqual(emptyResult.windows, []);
+test('Antigravity CLI keyring payload parses the agy token envelope', () => {
+    const payload = JSON.stringify({
+        token: {
+            access_token: 'ya29.access-token-value',
+            token_type: 'Bearer',
+            refresh_token: '1//refresh-token-value',
+            expiry: '2026-09-14T21:49:50.679262266+05:30',
+        },
+        auth_method: 'consumer',
+        id_token: 'eyJhbGciOi.payload.signature',
+    });
+    assert.deepEqual(parseAgyKeyringPayload(payload), {
+        accessToken: 'ya29.access-token-value',
+        refreshToken: '1//refresh-token-value',
+        expiresAt: Date.parse('2026-09-14T16:19:50.679Z'),
+    });
+});
 
-  const malformedResult = normalizeAntigravityUsage({}, {models: 'not-an-object'});
-  assert.deepEqual(malformedResult.windows, []);
+test('Antigravity CLI keyring payload rejects unusable entries', () => {
+    assert.equal(parseAgyKeyringPayload('not json'), null);
+    assert.equal(parseAgyKeyringPayload('[]'), null);
+    assert.equal(parseAgyKeyringPayload('{}'), null);
+    assert.equal(parseAgyKeyringPayload(JSON.stringify({token: {}})), null);
+    assert.equal(parseAgyKeyringPayload(JSON.stringify({token: {refresh_token: 'only-refresh'}})), null);
+
+    const noExpiry = parseAgyKeyringPayload(JSON.stringify({token: {access_token: 'token-value', expiry: 'not-a-date'}}));
+    assert.equal(noExpiry.expiresAt, null);
+    assert.equal(noExpiry.refreshToken, null);
+});
+
+// Shape captured from a live cloudcode-pa retrieveUserQuotaSummary response.
+const QUOTA_SUMMARY_PAYLOAD = {
+    groups: [
+        {
+            displayName: 'Gemini Models',
+            description: 'Models within this group: Gemini Flash, Gemini Pro',
+            buckets: [
+                {
+                    bucketId: 'gemini-weekly',
+                    displayName: 'Weekly Limit Remaining',
+                    window: 'weekly',
+                    resetTime: '2026-09-14T16:17:29Z',
+                    remainingFraction: 0.64553386,
+                },
+                {
+                    bucketId: 'gemini-5h',
+                    displayName: 'Five Hour Limit Remaining',
+                    window: '5h',
+                    resetTime: '2026-09-14T20:42:38Z',
+                    remainingFraction: 0.9877525,
+                },
+            ],
+        },
+        {
+            displayName: 'Claude and GPT models',
+            buckets: [
+                {
+                    bucketId: '3p-weekly',
+                    displayName: 'Weekly Limit Remaining',
+                    window: 'weekly',
+                    resetTime: '2026-09-21T16:05:39Z',
+                    remainingFraction: 1,
+                },
+                {
+                    bucketId: '3p-5h',
+                    displayName: 'Five Hour Limit Remaining',
+                    window: '5h',
+                    resetTime: '2026-09-14T21:05:39Z',
+                    remainingFraction: 1,
+                },
+            ],
+        },
+    ],
+};
+
+test('Antigravity quota summary flattens every group bucket', () => {
+    const buckets = extractQuotaSummaryBuckets(QUOTA_SUMMARY_PAYLOAD);
+    assert.equal(buckets.length, 4);
+    assert.deepEqual(buckets[0], {canonicalWindow: 'weekly', remainingFraction: 0.64553386, resetAt: Date.parse('2026-09-14T16:17:29Z')});
+    assert.equal(buckets[3].canonicalWindow, 'five-hour');
+});
+
+test('Antigravity quota summary reports one overall window per canonical window', () => {
+    const windows = normalizeQuotaSummary(QUOTA_SUMMARY_PAYLOAD);
+    assert.equal(windows.length, 2);
+
+    const fiveHour = windows.find(w => w.canonicalWindow === 'five-hour');
+    assert.equal(fiveHour.id, 'five-hour');
+    assert.equal(fiveHour.label, 'Five-hour');
+    // Tightest 5h bucket is Gemini at 98.775% remaining -> ~1.2% used.
+    assert.equal(Math.round(fiveHour.percent * 10000) / 100, 1.22);
+    assert.equal(fiveHour.resetAt, Date.parse('2026-09-14T20:42:38Z'));
+
+    const weekly = windows.find(w => w.canonicalWindow === 'weekly');
+    assert.equal(weekly.label, 'Weekly');
+    // Tightest weekly bucket is Gemini at 64.55% remaining -> ~35.4% used.
+    assert.equal(Math.round(weekly.percent * 100), 35);
+    assert.equal(weekly.resetAt, Date.parse('2026-09-14T16:17:29Z'));
+});
+
+test('Antigravity quota summary breaks remaining-fraction ties on the earliest reset', () => {
+    const payload = {
+        groups: [
+            {displayName: 'Group A', buckets: [{bucketId: 'a-weekly', window: 'weekly', resetTime: '2026-09-20T00:00:00Z', remainingFraction: 1}]},
+            {displayName: 'Group B', buckets: [{bucketId: 'b-weekly', window: 'weekly', resetTime: '2026-09-18T00:00:00Z', remainingFraction: 1}]},
+        ],
+    };
+    const windows = normalizeQuotaSummary(payload);
+    assert.equal(windows.length, 1);
+    assert.equal(windows[0].resetAt, Date.parse('2026-09-18T00:00:00Z'));
+});
+
+test('Antigravity quota summary ignores unknown windows and malformed payloads', () => {
+    assert.deepEqual(extractQuotaSummaryBuckets(null), []);
+    assert.deepEqual(extractQuotaSummaryBuckets({groups: 'nope'}), []);
+    assert.deepEqual(extractQuotaSummaryBuckets({groups: [{buckets: [{window: 'hourly', remainingFraction: 1}]}]}), []);
+    assert.deepEqual(extractQuotaSummaryBuckets({groups: [{buckets: [{window: 'weekly', remainingFraction: 'high'}]}]}), []);
+    assert.deepEqual(normalizeQuotaSummary(null), []);
 });
