@@ -14,11 +14,11 @@ try {
     const installedMetadata = JSON.parse(await readFile(path.join(target, 'metadata.json'), 'utf8'));
     if (installedMetadata.uuid !== uuid)
         throw new Error(`Refusing to replace extension with UUID ${installedMetadata.uuid}`);
-    // Replace our own development install atomically enough for local use and,
-    // importantly, do not leave removed runtime assets behind between builds.
+    // Removing the old copy keeps files dropped from the build from lingering.
     await rm(target, {recursive: true});
 } catch (error) {
-    if (error?.code !== 'ENOENT') throw error;
+    if (error.code !== 'ENOENT')
+        throw error;
 }
 await cp(path.join(root, 'dist', uuid), target, {recursive: true, force: true});
 execFileSync('glib-compile-schemas', [path.join(target, 'schemas')], {stdio: 'inherit'});

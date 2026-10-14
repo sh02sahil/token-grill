@@ -1,94 +1,68 @@
+import {clampFraction, isRecord, numberAt, recordAt, stringAt, toEpochMs} from '../../core/json.js';
 import type {CanonicalQuotaWindow, UsageWindow} from '../../core/types.js';
+import {windowLabel} from '../windows.js';
 
-export interface CodexUsageResult {
+const HOUR_SECONDS = 60 * 60;
+const DAY_SECONDS = 24 * HOUR_SECONDS;
+
+export interface CodexUsage {
     windows: UsageWindow[];
     plan: string | null;
 }
 
-function numberAt(value: unknown, keys: string[]): number | null {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-    const object = value as Record<string, unknown>;
-    for (const key of keys) {
-        const candidate = object[key];
-        if (typeof candidate === 'number' && Number.isFinite(candidate)) return candidate;
-    }
-    return null;
-}
-
-function canonicalFor(seconds: number | null, label: string): CanonicalQuotaWindow {
-    const text = label.toLowerCase();
-    // Duration is authoritative for the observed Codex response.  The API's
-    // primary/secondary names describe ordering, not the actual quota window.
-    if ((seconds !== null && Math.abs(seconds - 5 * 60 * 60) <= 2 * 60 * 60) || /five.?hour|5.?hour|session/.test(text)) return 'five-hour';
-    if ((seconds !== null && Math.abs(seconds - 7 * 24 * 60 * 60) <= 24 * 60 * 60) || /weekly|week|7.?day/.test(text)) return 'weekly';
+// The duration identifies a window; `primary` and `secondary` only describe
+// the order the service lists them in.
+function canonicalFor(seconds: number | null): CanonicalQuotaWindow {
+    if (seconds !== null && Math.abs(seconds - 5 * HOUR_SECONDS) <= 2 * HOUR_SECONDS)
+        return 'five-hour';
+    if (seconds !== null && Math.abs(seconds - 7 * DAY_SECONDS) <= DAY_SECONDS)
+        return 'weekly';
     return 'other';
 }
 
-function friendlyLabel(canonical: CanonicalQuotaWindow, fallback: string): string {
-    if (canonical === 'five-hour') return 'Five-hour';
-    if (canonical === 'weekly') return 'Weekly';
-    return fallback || 'Usage limit';
-}
-
-function normalizeWindow(value: unknown, fallbackLabel: string, index: number): UsageWindow | null {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-    const object = value as Record<string, unknown>;
-    const seconds = numberAt(object, ['limit_window_seconds', 'window_seconds', 'duration_seconds']);
-    const label = typeof object.window === 'string' ? object.window : typeof object.duration === 'string' ? object.duration : fallbackLabel;
-    const used = numberAt(object, ['used', 'used_tokens', 'tokens_used', 'total_tokens_used']);
-    const limit = numberAt(object, ['limit', 'token_limit', 'total_tokens_limit', 'quota', 'max']);
-    // Codex reports percentage-named fields in percentage points (0-100),
-    // including fractional values such as 0.4%.  In particular, a value of 1
-    // means 1% used, not a fully consumed 0-1 ratio.
-    const percentagePoints = numberAt(object, ['used_percent', 'percent_used', 'percent', 'percentage', 'usage_percent']);
-    const utilization = numberAt(object, ['utilization']);
-    const percent = percentagePoints !== null ? percentagePoints / 100 :
-        utilization !== null ? (utilization > 1 ? utilization / 100 : utilization) :
-        used !== null && limit !== null && limit > 0 ? used / limit : null;
-    const resetAtRaw = numberAt(object, ['reset_at', 'resetAt', 'reset_time']);
-    const resetAfterSeconds = numberAt(object, ['reset_after_seconds', 'resetAfterSeconds']);
-    const resetAt = resetAtRaw === null ? null : resetAtRaw < 10000000000 ? resetAtRaw * 1000 : resetAtRaw;
-    if (percent === null && used === null && limit === null) return null;
-    const canonicalWindow = canonicalFor(seconds, label);
+// `used_percent` is in percentage points (0-100), including fractional values:
+// 1 means 1% used, not a fully consumed ratio.
+function normalizeWindow(window: Record<string, unknown>, name: string, index: number): UsageWindow | null {
+    const percentagePoints = numberAt(window, 'used_percent');
+    if (percentagePoints === null)
+        return null;
+    const canonicalWindow = canonicalFor(numberAt(window, 'limit_window_seconds'));
     return {
         id: `${canonicalWindow}-${index}`,
         canonicalWindow,
-        label: friendlyLabel(canonicalWindow, label),
-        used,
-        limit,
-        percent: percent === null ? null : Math.max(0, Math.min(1, percent)),
-        resetAt,
-        resetAfterSeconds,
-        windowSeconds: seconds,
+        label: windowLabel(canonicalWindow, name),
+        used: null,
+        limit: null,
+        percent: clampFraction(percentagePoints / 100),
+        resetAt: toEpochMs(window.reset_at),
+        unit: null,
     };
 }
 
-export function normalizeCodexUsage(payload: unknown): CodexUsageResult {
-    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return {windows: [], plan: null};
-    const object = payload as Record<string, unknown>;
-    const candidates: Array<[unknown, string]> = [];
-    const addSection = (section: unknown, prefix: string): void => {
-        if (!section || typeof section !== 'object' || Array.isArray(section)) return;
-        const value = section as Record<string, unknown>;
-        candidates.push([value.primary_window, `${prefix} primary`]);
-        candidates.push([value.secondary_window, `${prefix} secondary`]);
-        if (Array.isArray(value.windows)) for (const item of value.windows) candidates.push([item, `${prefix} window`]);
-    };
-    addSection(object.rate_limit, 'Rate limit');
-    if (Array.isArray(object.additional_rate_limits)) {
-        object.additional_rate_limits.forEach((item, index) => addSection((item as Record<string, unknown>)?.rate_limit ?? item, `Additional ${index + 1}`));
-    } else if (object.additional_rate_limits && typeof object.additional_rate_limits === 'object') {
-        Object.entries(object.additional_rate_limits as Record<string, unknown>).forEach(([key, item]) => addSection((item as Record<string, unknown>)?.rate_limit ?? item, key));
+function rateLimitWindows(rateLimit: Record<string, unknown> | null): Record<string, unknown>[] {
+    if (!rateLimit)
+        return [];
+    return [recordAt(rateLimit, 'primary_window'), recordAt(rateLimit, 'secondary_window')]
+        .filter((window): window is Record<string, unknown> => window !== null);
+}
+
+export function normalizeCodexUsage(payload: unknown): CodexUsage {
+    if (!isRecord(payload))
+        return {windows: [], plan: null};
+    const sources: Array<[Record<string, unknown>, string]> = rateLimitWindows(recordAt(payload, 'rate_limit'))
+        .map(window => [window, 'Usage limit']);
+    // Plans with model-specific limits list them separately, each with its own windows.
+    const additional = Array.isArray(payload.additional_rate_limits) ? payload.additional_rate_limits.filter(isRecord) : [];
+    for (const limit of additional) {
+        const name = stringAt(limit, 'limit_name') ?? 'Usage limit';
+        for (const window of rateLimitWindows(recordAt(limit, 'rate_limit')))
+            sources.push([window, name]);
     }
     const windows: UsageWindow[] = [];
-    const seen = new Set<string>();
-    for (const [candidate, label] of candidates) {
-        const window = normalizeWindow(candidate, label, windows.length);
-        if (!window) continue;
-        const key = `${window.canonicalWindow}:${window.percent}:${window.resetAt}:${window.windowSeconds}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        windows.push(window);
+    for (const [window, name] of sources) {
+        const normalized = normalizeWindow(window, name, windows.length);
+        if (normalized)
+            windows.push(normalized);
     }
-    return {windows, plan: typeof object.plan_type === 'string' ? object.plan_type : null};
+    return {windows, plan: stringAt(payload, 'plan_type')};
 }

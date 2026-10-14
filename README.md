@@ -1,87 +1,219 @@
 # Token Grill
 
-Monitor AI usage limits from the GNOME top bar.
+Token Grill shows the usage limits of your AI accounts in the GNOME top bar.
 
-Token Grill puts live AI usage in the GNOME top bar. It can follow several
-accounts at once, so you can see what remains, switch accounts, and check reset
-times without interrupting your work.
+Token Grill monitors more than one account at the same time. From the top bar,
+you can see the remaining usage, select a different account, and see the reset
+times.
 
 ![Token Grill open on the GNOME desktop](docs/screenshots/usage-dashboard.png)
 
-## What it does
+## Functions
 
-- Monitors multiple Codex, Claude, and Kiro accounts.
-- Shows the active account in the top bar as text, a ring, or a compact bar.
-- Displays provider quota windows and reset times in your local timezone.
-- Switches between accounts from the popup.
-- Reports fresh, stale, partial, and failed refreshes without throwing away the
-  last useful reading.
-- Sends optional milestone notifications.
-- Reads local Codex and Claude session history when you enable history for an
-  account. It stores totals, never prompts or responses.
-- Shows Codex reset-credit availability without redeeming a credit.
+These are the functions of the top bar and the popup:
+
+- Token Grill monitors Codex, Claude, Kiro, and Antigravity accounts. You can
+  add more than one account for each service.
+- The top bar shows the active account as text, as a ring, or as a bar.
+- The popup shows the limits of each account and their reset times in your
+  local time zone.
+- You can select a different account in the popup.
+- If a refresh gets an error, the popup keeps the last good values and shows
+  the error.
+
+These are the other functions:
+
+- Token Grill can send a notification when the usage of an account becomes
+  more than a usage step.
+  The notification shows the percentage, the account, the limit, and the step.
+- For Codex and Claude accounts, Token Grill can read the local session
+  history. It keeps only token totals. It does not keep prompts or responses.
+- For Codex accounts, the popup shows the number of available reset credits.
+  Token Grill does not use a reset credit.
 
 ![Token Grill's compact panel indicator](docs/screenshots/panel-indicator.png)
 
 ## Install
 
-Token Grill supports **GNOME Shell 50**.
+Token Grill operates only with **GNOME Shell 50**.
 
-After its first release is approved, install it by searching for **Token Grill**
-in [Extension Manager](https://mattjakeman.com/apps/extension-manager) or on
-[GNOME Shell Extensions](https://extensions.gnome.org/). This is the recommended
-path and provides normal extension updates.
+After GNOME Shell Extensions approves the first release, search for
+**Token Grill** in [Extension Manager](https://mattjakeman.com/apps/extension-manager)
+or on [GNOME Shell Extensions](https://extensions.gnome.org/). This method also
+gives you the updates.
 
-To test a release archive before approval:
+To install a release archive before the approval, do these steps:
 
-```sh
-gnome-extensions install --force tokengrill@sh02sahil.github.io.shell-extension.zip
-```
+1. Run this command:
 
-Log out and back in if GNOME does not discover the extension immediately, then
-enable Token Grill in Extension Manager or the Extensions app.
+   ```sh
+   gnome-extensions install --force tokengrill@sh02sahil.github.io.shell-extension.zip
+   ```
 
-## Set up an account
+2. Log out and log in again.
+3. Enable Token Grill in Extension Manager or in the Extensions app.
 
-1. Sign in with the provider's CLI first. Token Grill does not perform logins.
-2. Open Token Grill's extension preferences.
-3. Select **Discover** to find standard account directories, or select
-   **Add provider** to enter a directory yourself.
-4. Choose which account appears in the top bar and whether Token Grill may scan
-   its local history.
+## Add an account
 
-Typical account locations are `~/.codex`, `~/.claude`, and
-`$XDG_DATA_HOME/kiro-cli`. Separate homes such as `~/.codex2` remain separate
+1. Sign in to the service with the CLI of that service. Token Grill does not
+   sign in for you.
+2. Open the preferences of Token Grill.
+3. Go to the **Providers** page.
+4. To find the accounts on this computer, select **Discover…**. To type the
+   home directory of an account, select **Add Account…**.
+5. Select the account for the top bar.
+6. Select if Token Grill can read the local history of the account.
+
+These are the usual home directories: `~/.codex`, `~/.claude`,
+`$XDG_DATA_HOME/kiro-cli`, and `~/.gemini/antigravity-cli`. Each home directory
+is a different account. For example, `~/.codex` and `~/.codex2` are two Codex
 accounts.
 
-Kiro support also needs the Gda 5.0 SQLite GObject-introspection binding from
-your Linux distribution.
+## Optional system libraries
+
+Two services must have a GObject introspection library from your Linux
+distribution:
+
+| Service | Library | Debian or Ubuntu package |
+|---------|---------|--------------------------|
+| Kiro | Gda 5.0 with the SQLite provider | `gir1.2-gda-5.0` |
+| Antigravity CLI (keyring sign-in) | libsecret 1 | `gir1.2-secret-1` |
+
+Token Grill loads a library with a dynamic `import()` only when an account
+uses it. If a library is missing, only that account shows an error. All other
+accounts continue to operate.
 
 ## Privacy and network access
 
-Token Grill reads credentials from the account directories you configure and
-sends them only to that provider's HTTPS usage service. It does not run provider
-CLIs, collect telemetry, or send prompt and response content anywhere.
+Token Grill reads the credentials that the CLI of each service stored on this
+computer. It sends these credentials only to that service. Token Grill
+connects only to these hosts:
 
-The extension stores compact usage totals under the XDG data directory and
-parser checkpoints under the XDG state directory. Credentials, provider
-responses, prompts, and responses are not copied into Token Grill's files.
+| Service | Host | Purpose |
+|---------|------|---------|
+| Codex | `chatgpt.com` | Usage limits and reset credits |
+| Claude | `api.anthropic.com` | Usage limits |
+| Kiro | `codewhisperer.us-east-1.amazonaws.com`, `q.<region>.amazonaws.com`, or the AWS ISO `q.*` host of your region | Usage limits |
+| Kiro | `oidc.<region>.amazonaws.com` | A new token when the sign-in is expired |
+| Antigravity | `cloudcode-pa.googleapis.com` | Plan and usage limits |
+| Antigravity | `oauth2.googleapis.com` | A new token when the sign-in is expired |
 
-Kiro's SQLite authentication store is opened read-only. If its OIDC access token
-has expired, Token Grill may refresh it in memory; it does not write the refreshed
-credential back to Kiro's database.
+Each request obeys these limits:
+
+- The request goes only to a host on a fixed list.
+- The request uses only HTTPS.
+- Token Grill does not accept redirects.
+- Token Grill stops after 1 MiB of response data.
+
+Each request uses this User-Agent:
+
+```text
+TokenGrill (+https://github.com/sh02sahil/token-grill; usage monitor for Codex, Claude, Kiro and Antigravity)
+```
+
+The Antigravity quota service gives data only when the User-Agent contains
+the word Antigravity. Thus, the User-Agent names all the services that Token Grill
+monitors.
+
+Token Grill does not start other programs. It does not collect telemetry. It
+does not read or send prompts or responses.
+
+The Kiro usage request gets the e-mail address of the account. The popup shows
+this address. Thus, you can see which account `kiro-cli` uses. Token Grill does not
+write the address to a file.
+
+### Local files that Token Grill reads
+
+Each account has a home directory. For each account, you can set a different
+credential file and a different sessions directory.
+
+For Codex and Claude accounts, Token Grill reads these files:
+
+- Codex: `<home>/auth.json`. The default home is `~/.codex`. With local
+  history, Token Grill also reads `<home>/sessions/` and
+  `<home>/archived_sessions/`.
+- Claude: `<home>/.credentials.json`. The default home is `~/.claude`. With
+  local history, Token Grill also reads `<home>/projects/`.
+
+For Kiro and Antigravity accounts, Token Grill reads these files:
+
+- Kiro: `<home>/data.sqlite3`. The default home is `$XDG_DATA_HOME/kiro-cli`.
+  Token Grill opens the database read-only, with the SQLite `query_only` guard.
+  It reads the database again only after its size or modification time
+  changes.
+- Antigravity: the first of `acp_token.json`, `oauth_creds.json`, and
+  `credentials.json` in the home. The default home is
+  `~/.gemini/antigravity-cli`. **Discover…** also finds `~/.gemini/antigravity`,
+  `~/.antigravity`, and `~/.config/Antigravity`.
+
+If Token Grill cannot use an Antigravity credential file, it reads the Secret
+Service item of the Antigravity CLI (`service=gemini`, `username=antigravity`).
+Token Grill does not unlock a locked keyring.
+
+If a Kiro or Antigravity access token is expired, Token Grill gets a new token.
+It keeps the new token only in memory. It does not write the token to the files
+or the keyring of the service.
+
+### Files of Token Grill
+
+- `$XDG_DATA_HOME/token-grill/` contains the usage totals.
+- `$XDG_STATE_HOME/token-grill/` contains the history checkpoints and the
+  notification state.
+
+These files do not contain credentials, service responses, prompts, or
+responses.
+
+## Test a development build
+
+Use a nested GNOME Shell with a separate data directory and a separate state
+directory. Do these steps:
+
+1. Run these commands:
+
+   ```sh
+   export XDG_DATA_HOME="$(mktemp -d)" XDG_STATE_HOME="$(mktemp -d)"
+   npm ci
+   npm run install:local
+   npm run dev:shell
+   ```
+
+   `npm run dev:shell` starts `dbus-run-session -- gnome-shell --devkit --wayland`.
+   The script enables Token Grill, disables it, and enables it again. After
+   each step, it shows the state of the extension.
+
+2. In a different terminal, look at the log:
+
+   ```sh
+   journalctl -f -o cat /usr/bin/gnome-shell
+   ```
+
+3. Lock and unlock the nested session one time. The script shows the commands.
+
+CAUTION: The nested shell uses the same dconf database as your desktop. If you
+change a preference in the nested shell, the preference also changes on your
+desktop.
+If you enable or disable an extension in the nested shell, the extension also
+changes on your desktop.
+
+For the full procedure, refer to [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Why this exists
 
-Token Grill began as a personal tool. I wanted one GNOME extension that could
-handle multiple accounts, the providers I use while coding, compact panel
-display modes, clear reset information, and privacy-conscious local history.
-I could not find an existing extension that covered that combination, so I
-built this one and decided to share it.
+Token Grill started as a personal tool. I wanted one GNOME extension with these
+functions:
 
-Codex, Claude, and Kiro make up the first rollout because they are the services
-I currently use. More providers may follow when they can be supported without
-weakening the extension's privacy or reliability.
+- More than one account for each service.
+- The services that I use when I write code.
+- Small displays in the top bar.
+- Clear reset times.
+- Local history that keeps prompts and responses private.
+
+I did not find an extension with all these functions. Thus, I made this
+extension, and I share it.
+
+The first release monitors Codex, Claude, Kiro, and Antigravity, because I use
+these services. Token Grill can monitor more services in the future, if they
+do not decrease the privacy or the reliability of the extension.
 
 ## AI development declaration
 
@@ -97,25 +229,30 @@ and explaining the code.
 
 ## Troubleshooting
 
-- **Login required:** open the provider's CLI and sign in again.
-- **Kiro database unreadable:** install the Gda 5.0 SQLite binding and restart
-  the preferences window.
-- **No history:** enable local history for that account and confirm its session
-  directory exists.
-- **Changes do not appear:** disable and re-enable the extension. On Wayland,
-  log out and back in after replacing extension files.
-- **A provider changed its API:** open an issue with the error text, but never
-  attach credentials or a real session log.
+- **Sign-in required:** Open the CLI of the service and sign in again.
+- **Kiro database unreadable:** Install the Gda 5.0 SQLite library. Then close
+  the preferences window and open it again.
+- **System keyring or libsecret 1 unavailable:** Install the libsecret 1
+  library, or sign in to Antigravity with a credential file.
+- **Antigravity CLI sign-in expired:** Run an `agy` command. The Antigravity CLI
+  then gets a new token.
+- **No history:** Enable local history for the account. Make sure that the
+  session directory of the account is present.
+- **Changes do not show:** Disable the extension and enable it again. On
+  Wayland, log out and log in again after you replace the extension files.
+- **A service changed its API:** Open an issue with the error text. Do not
+  attach credentials or a session log from your computer.
 
 ## Contributing
 
-Bug reports and focused pull requests are welcome. Read
-[CONTRIBUTING.md](CONTRIBUTING.md) before sharing logs or account fixtures.
+We accept bug reports and small pull requests. Before you share logs or account
+data, read [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Independence and license
 
-Token Grill is an independent project. OpenAI, Anthropic, and Kiro do not
-endorse or sponsor it. Provider marks identify their services; see
-[NOTICE.md](NOTICE.md) for sources and terms.
+Token Grill is an independent project. OpenAI, Anthropic, Amazon, and Google do
+not endorse or sponsor Token Grill. Token Grill uses the service names only to
+identify each service. The service icons are original symbolic drawings. Refer
+to [NOTICE.md](NOTICE.md).
 
-Token Grill is released under GPL-3.0-or-later. See [LICENSE](LICENSE).
+The license of Token Grill is GPL-3.0-or-later. Refer to [LICENSE](LICENSE).

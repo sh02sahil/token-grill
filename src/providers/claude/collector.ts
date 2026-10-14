@@ -1,29 +1,31 @@
+import {CollectorError, NO_USAGE} from '../../core/errors.js';
 import type {ProviderInstance, ProviderSnapshot} from '../../core/types.js';
-import {emptySnapshot} from '../../core/types.js';
-import {BaseCollector, type CollectorContext} from '../base.js';
-import {ClaudeUsageCollector} from './usageApi.js';
-import {scanClaudeHistory} from './history.js';
+import {BaseCollector, type CollectorContext, type LimitsUpdate} from '../base.js';
+import {loadClaudeAccessToken} from './auth.js';
+import {claudeUsageEvent} from './history.js';
+import {normalizeClaudeUsage} from './normalize.js';
+
+const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage';
+
+async function fetchLimits(instance: ProviderInstance, context: CollectorContext): Promise<LimitsUpdate> {
+    const accessToken = await loadClaudeAccessToken(instance, context.cancellable);
+    const payload = await context.requestJson('GET', USAGE_URL, {
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+    });
+    const windows = normalizeClaudeUsage(payload);
+    if (!windows.length)
+        throw new CollectorError('response-shape', NO_USAGE);
+    return {windows};
+}
 
 export class ClaudeCollector extends BaseCollector {
-    private readonly live = new ClaudeUsageCollector();
-    async collect(instance: ProviderInstance, context: CollectorContext, previous: ProviderSnapshot | null): Promise<ProviderSnapshot> {
-        let snapshot = previous || emptySnapshot(instance.id);
-        if (instance.liveUsageEnabled) {
-            snapshot = await this.live.collect(instance, context, snapshot);
-            context.onSourceResult?.('limits', snapshot.error ? 'failed' : 'success');
-        }
-        if (instance.localHistoryEnabled) {
-            try {
-                context.onSourcePhase?.('history');
-                const indexed = await scanClaudeHistory(instance, context.aggregates, context.checkpoints, context.cancellable);
-                await context.aggregates.flush();
-                await context.checkpoints.flush();
-                const today = new Date(); today.setUTCHours(0, 0, 0, 0);
-                const monthStart = Date.now() - 30 * 86400000;
-                snapshot = {...snapshot, indexedFiles: indexed.files, indexedBytes: indexed.bytes, totals: context.aggregates.totals(instance.id), todayTotals: context.aggregates.today(instance.id), monthTotals: context.aggregates.totals(instance.id, monthStart), todayCost: context.aggregates.cost(instance.id, today.getTime(), context.catalog), monthCost: context.aggregates.cost(instance.id, monthStart, context.catalog), localHistoryUpdatedAt: Date.now()};
-                context.onSourceResult?.('history', 'success');
-            } catch (error) { context.onSourceResult?.('history', 'failed'); snapshot = this.failed(instance, snapshot, error); }
-        }
-        return snapshot;
+    async collect(instance: ProviderInstance, context: CollectorContext, snapshot: ProviderSnapshot): Promise<ProviderSnapshot> {
+        let next = snapshot;
+        if (instance.liveUsageEnabled)
+            next = await this.collectLimits(context, next, () => fetchLimits(instance, context));
+        if (instance.localHistoryEnabled)
+            next = await this.collectHistory(instance, context, next, claudeUsageEvent);
+        return next;
     }
 }

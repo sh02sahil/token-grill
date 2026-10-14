@@ -1,18 +1,47 @@
-.tokengrill-preferences .title-4 { font-weight: 700; }
-.tokengrill-preferences preferencesgroup { margin-bottom: 12px; }
-.tokengrill-provider-image { min-width: 22px; min-height: 22px; margin-right: 8px; }
-.tokengrill-accent-blue, .tokengrill-accent-cyan, .tokengrill-accent-green, .tokengrill-accent-amber,
-.tokengrill-accent-orange, .tokengrill-accent-red, .tokengrill-accent-purple, .tokengrill-accent-pink {
-    min-width: 30px; min-height: 30px; border-radius: 999px; margin: 4px;
+.tokengrill-swatch {
+    min-width: 30px;
+    min-height: 30px;
+    border-radius: 999px;
+    padding: 0;
 }
-.tokengrill-accent-blue { background: #62a0ea; }
-.tokengrill-accent-cyan { background: #5bc0eb; }
-.tokengrill-accent-green { background: #57e389; }
-.tokengrill-accent-amber { background: #f8e45c; }
-.tokengrill-accent-orange { background: #ff9b42; }
-.tokengrill-accent-red { background: #ff6b6b; }
-.tokengrill-accent-purple { background: #c7a0ff; }
-.tokengrill-accent-pink { background: #f28cb1; }
-.tokengrill-accent-blue:checked, .tokengrill-accent-cyan:checked, .tokengrill-accent-green:checked,
-.tokengrill-accent-amber:checked, .tokengrill-accent-orange:checked, .tokengrill-accent-red:checked,
-.tokengrill-accent-purple:checked, .tokengrill-accent-pink:checked { outline: 3px solid @accent_bg_color; outline-offset: 2px; }
+
+.tokengrill-swatch:checked {
+    outline: 3px solid var(--accent-bg-color);
+    outline-offset: 2px;
+}
+
+.tokengrill-accent-blue {
+    background: var(--accent-blue);
+}
+
+.tokengrill-accent-teal {
+    background: var(--accent-teal);
+}
+
+.tokengrill-accent-green {
+    background: var(--accent-green);
+}
+
+.tokengrill-accent-yellow {
+    background: var(--accent-yellow);
+}
+
+.tokengrill-accent-orange {
+    background: var(--accent-orange);
+}
+
+.tokengrill-accent-red {
+    background: var(--accent-red);
+}
+
+.tokengrill-accent-pink {
+    background: var(--accent-pink);
+}
+
+.tokengrill-accent-purple {
+    background: var(--accent-purple);
+}
+
+.tokengrill-accent-slate {
+    background: var(--accent-slate);
+}

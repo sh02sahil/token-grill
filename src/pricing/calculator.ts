@@ -1,8 +1,11 @@
-import type {ModelRate} from './catalog.js';
 import type {TokenTotals} from '../core/types.js';
+import type {ModelRate} from './catalog.js';
 
-export function costFor(totals: TokenTotals, rate: ModelRate | null): number | null {
-    if (!rate) return null;
-    return (totals.input * rate.input + totals.output * rate.output + totals.cachedInput * (rate.cachedInput ?? rate.input) + totals.cacheWrite * (rate.cacheWrite ?? rate.input)) / 1_000_000;
+// Rates are per million tokens; cache rates default to the input rate.
+export function costFor(totals: TokenTotals, rate: ModelRate): number {
+    const input = totals.input * rate.input;
+    const output = totals.output * rate.output;
+    const cachedInput = totals.cachedInput * (rate.cachedInput ?? rate.input);
+    const cacheWrite = totals.cacheWrite * (rate.cacheWrite ?? rate.input);
+    return (input + output + cachedInput + cacheWrite) / 1_000_000;
 }
-

@@ -1,83 +1,98 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  notificationBucket,
-  milestoneNotificationText,
-  selectedNotificationWindow,
-  shouldNotifyMilestone,
-  parseTestNotificationRequest,
-  testNotificationText,
-  testNotificationWindowLabel,
+    clampStep,
+    notificationBucket,
+    milestoneNotificationText,
+    notificationHeader,
+    shouldNotifyMilestone,
+    parseTestNotificationRequest,
+    testNotificationText,
+    windowTitle,
 } from '../../build/tests/notification-policy.mjs';
-import {ACCENT_COLORS, accentColor} from '../../build/tests/accent.mjs';
+import {UNTRANSLATED} from '../../build/tests/i18n.mjs';
 
-const provider = preference => ({id: 'codex-personal', panelWindowPreference: preference});
+const tr = UNTRANSLATED;
+const provider = (preference, kind = 'codex') => ({id: 'codex-personal', kind, displayName: 'Codex - Personal', panelWindowPreference: preference});
 const snapshot = {
-  windows: [
-    {id: 'five', canonicalWindow: 'five-hour', label: 'Five-hour', percent: 0.42},
-    {id: 'week', canonicalWindow: 'weekly', label: 'Weekly', percent: 0.68},
-    {id: 'month', canonicalWindow: 'monthly', label: 'Monthly', percent: 0.51},
-  ],
+    windows: [
+        {id: 'five', canonicalWindow: 'five-hour', label: 'Five-hour', percent: 0.42},
+        {id: 'week', canonicalWindow: 'weekly', label: 'Weekly', percent: 0.68},
+        {id: 'month', canonicalWindow: 'monthly', label: 'Monthly', percent: 0.51},
+    ],
 };
 
-test('only the provider-selected quota window drives notifications', () => {
-  assert.equal(selectedNotificationWindow(provider('five-hour'), snapshot)?.canonicalWindow, 'five-hour');
-  assert.equal(selectedNotificationWindow(provider('weekly'), snapshot)?.canonicalWindow, 'weekly');
-  assert.equal(selectedNotificationWindow(provider('monthly'), snapshot)?.canonicalWindow, 'monthly');
-  assert.equal(selectedNotificationWindow(provider('automatic'), snapshot)?.canonicalWindow, 'weekly');
-  assert.equal(selectedNotificationWindow(provider('monthly'), {windows: snapshot.windows.slice(0, 2)})?.canonicalWindow, 'weekly');
-});
-
 test('first observation seeds silently and later bucket crossing notifies once', () => {
-  assert.equal(shouldNotifyMilestone(null, 'weekly:reset-1', 6, 10), false);
-  const previous = {resetIdentity: 'weekly:reset-1', lastNotifiedBucket: 6, configuredStep: 10};
-  assert.equal(shouldNotifyMilestone(previous, 'weekly:reset-1', 6, 10), false);
-  assert.equal(shouldNotifyMilestone(previous, 'weekly:reset-1', 7, 10), true);
-  assert.equal(shouldNotifyMilestone(previous, 'weekly:reset-2', 7, 10), false);
+    assert.equal(shouldNotifyMilestone(null, 'weekly:reset-1', 6, 10), false);
+    const previous = {resetIdentity: 'weekly:reset-1', lastNotifiedBucket: 6, configuredStep: 10};
+    assert.equal(shouldNotifyMilestone(previous, 'weekly:reset-1', 6, 10), false);
+    assert.equal(shouldNotifyMilestone(previous, 'weekly:reset-1', 7, 10), true);
+    assert.equal(shouldNotifyMilestone(previous, 'weekly:reset-2', 7, 10), false);
 });
 
 test('notification buckets are clamped and step-normalized', () => {
-  assert.equal(notificationBucket(0.68, 10), 6);
-  assert.equal(notificationBucket(1.2, 10), 10);
-  assert.equal(notificationBucket(0.26, 24), 1);
+    assert.equal(clampStep(24), 25);
+    assert.equal(clampStep(1), 5);
+    assert.equal(clampStep(90), 50);
+    assert.equal(notificationBucket(0.68, 10), 6);
+    assert.equal(notificationBucket(1.2, 10), 10);
+    assert.equal(notificationBucket(0.26, 24), 1);
 });
 
-test('notification text follows display mode while milestones remain consumption-based', () => {
-  const window = {label: 'Five-hour'};
-  assert.deepEqual(milestoneNotificationText(window, 0.34, 30, 'remaining'), {
-    title: 'Five-hour usage',
-    body: '66% remaining · crossed the 30% milestone.',
-  });
-  assert.deepEqual(milestoneNotificationText(window, 0.34, 30, 'used'), {
-    title: 'Five-hour usage',
-    body: '34% consumed · crossed the 30% milestone.',
-  });
-  assert.deepEqual(milestoneNotificationText({label: 'Monthly credits'}, 0.51, 50, 'remaining'), {
-    title: 'Monthly credits usage',
-    body: '49% remaining · crossed the 50% milestone.',
-  });
+test('notification titles use header capitalization per window', () => {
+    assert.equal(windowTitle(tr, 'five-hour', 'Session'), 'Five-Hour Usage');
+    assert.equal(windowTitle(tr, 'weekly', 'Weekly'), 'Weekly Usage');
+    assert.equal(windowTitle(tr, 'monthly', 'Monthly credits'), 'Monthly Usage');
+    assert.equal(windowTitle(tr, 'other', 'Daily'), 'Daily Usage');
 });
 
-test('all account accents have stable notification emblem colors', () => {
-  assert.deepEqual(Object.keys(ACCENT_COLORS).sort(), ['amber', 'blue', 'cyan', 'green', 'orange', 'pink', 'purple', 'red']);
-  for (const [accent, color] of Object.entries(ACCENT_COLORS))
-    assert.equal(accentColor({accent}), color);
+test('the header names the reading and the account in the display mode', () => {
+    assert.equal(notificationHeader(tr, 'Claude - Team', 0.34, 'remaining'), '66% remaining - Claude - Team | Token Grill');
+    assert.equal(notificationHeader(tr, 'Claude - Team', 0.34, 'used'), '34% used - Claude - Team | Token Grill');
+    assert.equal(notificationHeader(tr, 'Claude - Team', 1.2, 'remaining'), '0% remaining - Claude - Team | Token Grill');
 });
 
-test('test notifications use the selected or provider fallback window and requested display mode', () => {
-  const configured = {...provider('five-hour'), kind: 'codex'};
-  assert.equal(testNotificationWindowLabel(configured, snapshot), 'Five-hour');
-  assert.equal(testNotificationWindowLabel({...configured, panelWindowPreference: 'monthly'}, {windows: snapshot.windows.slice(0, 2)}), 'Weekly');
-  assert.equal(testNotificationWindowLabel({...configured, kind: 'kiro', panelWindowPreference: 'monthly'}, null), 'Monthly credits');
-  assert.deepEqual(testNotificationText('Five-hour', 'remaining'), {
-    title: 'Five-hour usage',
-    body: 'Test alert · 66% remaining · 30% milestone preview.',
-  });
-  assert.match(testNotificationText('Weekly', 'used').body, /34% consumed/);
+test('milestone alerts name the window and state the milestone in the display mode', () => {
+    const account = {displayName: 'Claude - Team'};
+    const window = {canonicalWindow: 'five-hour', label: 'Five-hour'};
+    assert.deepEqual(milestoneNotificationText(tr, account, window, 0.34, 30, 'remaining'), {
+        header: '66% remaining - Claude - Team | Token Grill',
+        title: 'Five-Hour Usage',
+        body: 'Crossed the 70% remaining milestone',
+    });
+    assert.deepEqual(milestoneNotificationText(tr, account, window, 0.34, 30, 'used'), {
+        header: '34% used - Claude - Team | Token Grill',
+        title: 'Five-Hour Usage',
+        body: 'Crossed the 30% used milestone',
+    });
+    assert.equal(milestoneNotificationText(tr, account, {canonicalWindow: 'monthly', label: 'Monthly credits'}, 0.51, 50, 'remaining').title, 'Monthly Usage');
+});
+
+test('test notifications use the selected window and its current reading', () => {
+    assert.equal(testNotificationText(tr, provider('five-hour'), snapshot, 10, 'remaining').title, 'Five-Hour Usage');
+    assert.equal(testNotificationText(tr, provider('automatic'), snapshot, 10, 'remaining').title, 'Weekly Usage');
+    assert.equal(testNotificationText(tr, provider('monthly'), {windows: snapshot.windows.slice(0, 2)}, 10, 'remaining').title, 'Weekly Usage');
+    assert.deepEqual(testNotificationText(tr, provider('five-hour'), snapshot, 10, 'remaining'), {
+        header: '58% remaining - Codex - Personal | Token Grill',
+        title: 'Five-Hour Usage',
+        body: 'Test · crossed the 60% remaining milestone',
+    });
+    assert.equal(testNotificationText(tr, provider('weekly'), snapshot, 25, 'used').body, 'Test · crossed the 50% used milestone');
+    assert.equal(testNotificationText(tr, provider('five-hour'), {windows: [{canonicalWindow: 'five-hour', label: '', percent: 0.02}]}, 10, 'used').body,
+        'Test · crossed the 10% used milestone', 'below the first step the preview shows the first milestone');
+});
+
+test('test notifications without data use preview values and the preferred window', () => {
+    assert.equal(testNotificationText(tr, provider('monthly', 'kiro'), null, 10, 'remaining').title, 'Monthly Usage');
+    assert.deepEqual(testNotificationText(tr, provider('automatic'), null, 10, 'remaining'), {
+        header: '66% remaining - Codex - Personal | Token Grill',
+        title: 'Five-Hour Usage',
+        body: 'Test · crossed the 70% remaining milestone',
+    });
 });
 
 test('test notification requests require only bounded provider and nonce strings', () => {
-  assert.deepEqual(parseTestNotificationRequest('{"providerId":"account-1","nonce":"unique"}'), {providerId: 'account-1', nonce: 'unique'});
-  for (const malformed of ['', '{}', '[]', '{"providerId":"account-1"}', '{"providerId":4,"nonce":"x"}', 'not json'])
-    assert.equal(parseTestNotificationRequest(malformed), null);
+    assert.deepEqual(parseTestNotificationRequest('{"providerId":"account-1","nonce":"unique"}'), {providerId: 'account-1', nonce: 'unique'});
+    for (const malformed of ['', '{}', '[]', '{"providerId":"account-1"}', '{"providerId":4,"nonce":"x"}', 'not json'])
+        assert.equal(parseTestNotificationRequest(malformed), null);
 });

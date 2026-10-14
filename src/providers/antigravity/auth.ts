@@ -1,107 +1,106 @@
-import Gio from 'gi://Gio';
-import GLib from 'gi://GLib';
-import type {ProviderInstance} from '../../core/types.js';
-import {providerPaths, pathExists} from '../../core/paths.js';
+import type Gio from 'gi://Gio';
+
 import {CollectorError} from '../../core/errors.js';
-import {isCancellation} from '../../storage/atomicJson.js';
+import {numberAt, stringAt, toEpochMs} from '../../core/json.js';
+import {authFileCandidates} from '../../core/paths.js';
+import type {ProviderInstance} from '../../core/types.js';
+import {credentialErrorStatus, readCredentialJson, type CredentialStatus} from '../credentials.js';
+import {lookupAgyKeyringToken} from './keyringAuth.js';
 
-Gio._promisify(Gio.File.prototype, 'load_contents_async', 'load_contents_finish');
-Gio._promisify(Gio.File.prototype, 'query_info_async', 'query_info_finish');
+// A token this close to expiry is refreshed first, so it cannot expire in flight.
+const TOKEN_SKEW_MS = 60 * 1000;
 
+// File credentials from the Antigravity app carry an OAuth client and can be
+// refreshed here; the agy CLI's keyring token can only be renewed by agy itself.
 export interface AntigravityAuth {
+    source: 'file' | 'keyring';
     clientId: string | null;
     clientSecret: string | null;
     refreshToken: string | null;
     accessToken: string | null;
     expiresAt: number | null;
-    projectId: string | null;
-    path: string;
+}
+
+export function isAntigravityRefreshable(auth: AntigravityAuth): boolean {
+    return Boolean(auth.refreshToken && auth.clientId && auth.clientSecret);
 }
 
 export function isAntigravityTokenFresh(auth: AntigravityAuth): boolean {
-    return Boolean(auth.accessToken && auth.expiresAt !== null && auth.expiresAt > Date.now() + 60_000);
+    return Boolean(auth.accessToken) && auth.expiresAt !== null && auth.expiresAt > Date.now() + TOKEN_SKEW_MS;
 }
 
-function resolveCandidateAuthFile(instance: ProviderInstance): string {
-    const defaultPath = providerPaths(instance).authFile;
-    if (pathExists(defaultPath)) return defaultPath;
-
-    // Check fallback locations if the default path doesn't exist
-    const home = GLib.get_home_dir();
-    const candidates = [
-        GLib.build_filenamev([home, '.gemini', 'antigravity', 'acp_token.json']),
-        GLib.build_filenamev([home, '.antigravity', 'acp_token.json']),
-        GLib.build_filenamev([home, '.antigravity', 'oauth_creds.json']),
-    ];
-
-    for (const candidate of candidates) {
-        if (pathExists(candidate)) return candidate;
-    }
-
-    // Also check ~/.t3/userdata/providers/antigravity/*/antigravity-acp/acp_token.json
-    try {
-        const t3Dir = Gio.File.new_for_path(GLib.build_filenamev([home, '.t3', 'userdata', 'providers', 'antigravity']));
-        if (t3Dir.query_exists(null)) {
-            const enumerator = t3Dir.enumerate_children('standard::name,standard::type', Gio.FileQueryInfoFlags.NONE, null);
-            let info;
-            while ((info = enumerator.next_file(null))) {
-                if (info.get_file_type() !== Gio.FileType.DIRECTORY) continue;
-                const tokenFile = GLib.build_filenamev([home, '.t3', 'userdata', 'providers', 'antigravity', info.get_name(), 'antigravity-acp', 'acp_token.json']);
-                if (pathExists(tokenFile)) return tokenFile;
-            }
-        }
-    } catch {
-        // Ignore enumeration errors
-    }
-
-    return defaultPath;
+function notSignedIn(): CollectorError {
+    return new CollectorError('auth-missing', ({_}) => _('Antigravity is not signed in.'));
 }
 
-export async function loadAntigravityAuth(instance: ProviderInstance, cancellable: Gio.Cancellable | null = null): Promise<AntigravityAuth> {
-    const path = resolveCandidateAuthFile(instance);
+async function loadFileAuth(instance: ProviderInstance, cancellable: Gio.Cancellable | null): Promise<AntigravityAuth> {
+    for (const path of authFileCandidates(instance)) {
+        let payload: Record<string, unknown>;
+        try {
+            // The first file that exists wins, so they are read in order.
+            // eslint-disable-next-line no-await-in-loop
+            payload = await readCredentialJson(path, cancellable);
+        } catch (error) {
+            if (!(error instanceof CollectorError) || error.code !== 'auth-missing')
+                throw error;
+            continue;
+        }
+        const auth: AntigravityAuth = {
+            source: 'file',
+            clientId: stringAt(payload, 'client_id'),
+            clientSecret: stringAt(payload, 'client_secret'),
+            refreshToken: stringAt(payload, 'refresh_token'),
+            accessToken: stringAt(payload, 'access_token'),
+            expiresAt: toEpochMs(numberAt(payload, 'expiry_date')),
+        };
+        if (!auth.accessToken && !auth.refreshToken)
+            throw notSignedIn();
+        return auth;
+    }
+    throw notSignedIn();
+}
+
+async function loadKeyringAuth(cancellable: Gio.Cancellable | null): Promise<AntigravityAuth | null> {
+    const token = await lookupAgyKeyringToken(cancellable);
+    if (!token)
+        return null;
+    return {source: 'keyring', clientId: null, clientSecret: null, ...token};
+}
+
+function settle<T>(promise: Promise<T>): Promise<{value: T | null; error: unknown}> {
+    return promise.then(value => ({value, error: null}), (error: unknown) => {
+        if (!(error instanceof CollectorError))
+            throw error;
+        return {value: null, error};
+    });
+}
+
+// A usable credential file wins, because it can be refreshed without the user.
+// Otherwise a live keyring token takes over from a stale file, so an account
+// signed in through agy keeps working.
+export async function resolveAntigravityAuth(instance: ProviderInstance, cancellable: Gio.Cancellable | null): Promise<AntigravityAuth> {
+    const file = await settle(loadFileAuth(instance, cancellable));
+    if (file.value && (isAntigravityTokenFresh(file.value) || isAntigravityRefreshable(file.value)))
+        return file.value;
+    const keyring = await settle(loadKeyringAuth(cancellable));
+    if (keyring.value && (!file.value || isAntigravityTokenFresh(keyring.value)))
+        return keyring.value;
+    if (file.value)
+        return file.value;
+    // A broken keyring explains more than the missing file it stands in for.
+    throw keyring.error ?? file.error;
+}
+
+export async function antigravityCredentialStatus(instance: ProviderInstance, cancellable: Gio.Cancellable | null): Promise<CredentialStatus> {
+    let auth: AntigravityAuth;
     try {
-        const file = Gio.File.new_for_path(path);
-        const info = await file.query_info_async('standard::type,standard::size', Gio.FileQueryInfoFlags.NONE, GLib.PRIORITY_DEFAULT, cancellable);
-        if (info.get_file_type() !== Gio.FileType.REGULAR) throw new CollectorError('Antigravity credentials are not a regular file.', 'auth-invalid');
-        if (info.get_size() > 1024 * 1024) throw new CollectorError('Antigravity credentials file is unexpectedly large.', 'auth-invalid');
-        const [bytes] = await file.load_contents_async(cancellable);
-        const payload = JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>;
-
-        const clientId = typeof payload.client_id === 'string' ? payload.client_id : typeof payload.clientId === 'string' ? payload.clientId : null;
-        const clientSecret = typeof payload.client_secret === 'string' ? payload.client_secret : typeof payload.clientSecret === 'string' ? payload.clientSecret : null;
-        const refreshToken = typeof payload.refresh_token === 'string' ? payload.refresh_token : typeof payload.refreshToken === 'string' ? payload.refreshToken : null;
-        const accessToken = typeof payload.access_token === 'string' ? payload.access_token : typeof payload.accessToken === 'string' ? payload.accessToken : null;
-        const projectId = typeof payload.project_id === 'string' ? payload.project_id : typeof payload.projectId === 'string' ? payload.projectId : 'aicode-consumers';
-
-        let expiresAt: number | null = null;
-        if (typeof payload.expiry_date === 'number') {
-            expiresAt = payload.expiry_date < 10000000000 ? payload.expiry_date * 1000 : payload.expiry_date;
-        } else if (typeof payload.expiresAt === 'number') {
-            expiresAt = payload.expiresAt < 10000000000 ? payload.expiresAt * 1000 : payload.expiresAt;
-        } else if (typeof payload.expires_at === 'number') {
-            expiresAt = payload.expires_at < 10000000000 ? payload.expires_at * 1000 : payload.expires_at;
-        }
-
-        if (!accessToken && !refreshToken) {
-            throw new CollectorError('No Antigravity access token or refresh token found. Ensure Antigravity is logged in.', 'auth-missing');
-        }
-
-        return {clientId, clientSecret, refreshToken, accessToken, expiresAt, projectId, path};
+        auth = await resolveAntigravityAuth(instance, cancellable);
     } catch (error) {
-        if (isCancellation(error)) throw error;
-        if (error instanceof CollectorError) throw error;
-        throw new CollectorError(`Antigravity authentication was not found at ${path}.`, 'auth-missing');
+        return credentialErrorStatus(error);
     }
-}
-
-export async function antigravityCredentialStatus(instance: ProviderInstance): Promise<'authenticated' | 'expired-refreshable' | 'login-required' | 'database-unreadable' | 'dependency-missing'> {
-    try {
-        const auth = await loadAntigravityAuth(instance);
-        if (isAntigravityTokenFresh(auth)) return 'authenticated';
-        if (auth.refreshToken && auth.clientId && auth.clientSecret) return 'expired-refreshable';
-        return 'login-required';
-    } catch (error) {
-        if (error instanceof CollectorError && error.code === 'auth-missing') return 'login-required';
-        return 'database-unreadable';
-    }
+    if (isAntigravityTokenFresh(auth))
+        return 'authenticated';
+    if (isAntigravityRefreshable(auth))
+        return 'expired-refreshable';
+    return auth.source === 'keyring' ? 'expired-external' : 'login-required';
 }

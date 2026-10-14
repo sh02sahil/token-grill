@@ -5,3 +5,4 @@ build/
 .eslintcache
 coverage/
 .DS_Store
+venv/

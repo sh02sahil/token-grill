@@ -1,28 +1,32 @@
 export type ProviderKind = 'codex' | 'claude' | 'kiro' | 'antigravity';
-export type AccentColor = 'blue' | 'cyan' | 'green' | 'amber' | 'orange' | 'red' | 'purple' | 'pink';
+export type AccentColor = 'blue' | 'teal' | 'green' | 'yellow' | 'orange' | 'red' | 'pink' | 'purple' | 'slate';
 export type QuotaWindowPreference = 'automatic' | 'five-hour' | 'weekly' | 'monthly';
 export type PanelPercentageMode = 'remaining' | 'used';
 export type PanelDisplayStyle = 'text' | 'ring' | 'bar';
 export type ConnectionState = 'unknown' | 'ready' | 'local' | 'stale' | 'error' | 'disabled';
 export type CanonicalQuotaWindow = 'five-hour' | 'weekly' | 'monthly' | 'other';
-export type ProviderErrorCode = 'auth-missing' | 'auth-expired' | 'auth-invalid' | 'dependency' | 'permission' | 'offline' | 'timeout' | 'rate-limited' | 'http' | 'response-shape' | 'local-history';
-export type RefreshTrigger = 'startup' | 'scheduled' | 'manual-provider' | 'manual-all' | 'unlock' | 'network-reconnected';
-export type RefreshPhase = 'idle' | 'queued' | 'fetching-limits' | 'fetching-reset-credits' | 'scanning-history' | 'success' | 'partial' | 'failed';
-export type RefreshOutcome = 'changed' | 'unchanged' | 'partial' | 'failed' | null;
-
-export interface RefreshRequestResult {
-    jobIds: string[];
-    acceptedProviderIds: string[];
-    coalescedProviderIds: string[];
-    rejectedProviderIds: string[];
-}
+export type ProviderErrorCode =
+    | 'auth-missing'
+    | 'auth-expired'
+    | 'auth-invalid'
+    | 'unsupported-account'
+    | 'dependency'
+    | 'permission'
+    | 'offline'
+    | 'timeout'
+    | 'rate-limited'
+    | 'http'
+    | 'response-shape'
+    | 'local-history';
+export type RefreshPhase = 'idle' | 'queued' | 'fetching-limits' | 'fetching-reset-credits' | 'scanning-history';
+export type RefreshOutcome = 'changed' | 'unchanged' | 'partial' | 'failed';
+export type RefreshSource = 'limits' | 'reset-credits' | 'history';
+export type SourceResult = 'success' | 'failed';
 
 export interface ProviderErrorInfo {
     code: ProviderErrorCode;
     message: string;
     recovery: 'retry' | 'reauthenticate' | 'edit-provider' | 'none';
-    occurredAt: number;
-    retryAt: number | null;
 }
 
 export interface ProviderInstance {
@@ -50,28 +54,18 @@ export interface UsageWindow {
     limit: number | null;
     percent: number | null;
     resetAt: number | null;
-    resetAfterSeconds: number | null;
-    windowSeconds: number | null;
-    unit?: string | null;
+    unit: 'credits' | null;
 }
 
-export type ResetCreditStatus = 'available' | 'redeemed' | 'expired' | 'unknown';
-
 export interface LimitResetCredit {
-    resetType: string | null;
     title: string | null;
-    status: ResetCreditStatus;
-    grantedAt: number | null;
     expiresAt: number | null;
 }
 
 export interface LimitResetCreditSummary {
-    supported: boolean;
-    availableCount: number | null;
-    totalEarnedCount: number | null;
-    nextExpiresAt: number | null;
+    availableCount: number;
     credits: LimitResetCredit[];
-    fetchedAt: number | null;
+    fetchedAt: number;
     stale: boolean;
     error: ProviderErrorInfo | null;
 }
@@ -92,57 +86,26 @@ export interface ProviderSnapshot {
     error: string | null;
     errorInfo: ProviderErrorInfo | null;
     plan: string | null;
+    account: string | null;
     windows: UsageWindow[];
     totals: TokenTotals;
     todayTotals: TokenTotals;
     monthTotals: TokenTotals;
     todayCost: number | null;
     monthCost: number | null;
-    indexedFiles: number;
-    indexedBytes: number;
     quotaFetchedAt: number | null;
-    quotaDataChangedAt: number | null;
     localHistoryUpdatedAt: number | null;
-    resetCreditsFetchedAt: number | null;
     resetCredits: LimitResetCreditSummary | null;
 }
 
-export interface SourceRefreshState {
-    enabled: boolean;
-    phase: 'idle' | 'queued' | 'running' | 'success' | 'failed';
-    startedAt: number | null;
-    completedAt: number | null;
-    error: ProviderErrorInfo | null;
-}
-
-export interface ProviderRefreshState {
-    jobId: string | null;
-    providerId: string;
-    trigger: RefreshTrigger | null;
-    phase: RefreshPhase;
-    requestedAt: number | null;
-    startedAt: number | null;
-    completedAt: number | null;
-    lastAttemptAt: number | null;
-    lastSuccessfulRefresh: number | null;
-    lastDataChangeAt: number | null;
-    outcome: RefreshOutcome;
-    limits: SourceRefreshState;
-    resetCredits: SourceRefreshState;
-    localHistory: SourceRefreshState;
-}
-
 export interface ProviderRuntimeState {
-    providerId: string;
-    snapshot: ProviderSnapshot | null;
-    refresh: ProviderRefreshState;
-    error: ProviderErrorInfo | null;
+    phase: RefreshPhase;
+    outcome: RefreshOutcome | null;
+    completedAt: number | null;
+    sources: Record<RefreshSource, SourceResult | null>;
 }
 
 export interface UsageEvent {
-    providerId: string;
-    source: string;
-    eventKey: string;
     capturedAt: number;
     model: string | null;
     totals: TokenTotals;
@@ -153,8 +116,6 @@ export interface AggregateBucket {
     date: string;
     model: string;
     totals: TokenTotals;
-    events: number;
-    sourceBytes: Record<string, number>;
 }
 
 export interface FileCheckpoint {
@@ -168,9 +129,7 @@ export interface FileCheckpoint {
 
 export interface ProviderPaths {
     authFile: string;
-    sessionsDirectory: string;
-    archivedSessionsDirectory: string;
-    configFile: string;
+    historyDirectories: string[];
 }
 
 export const EMPTY_TOTALS: TokenTotals = {
@@ -182,7 +141,7 @@ export const EMPTY_TOTALS: TokenTotals = {
     total: 0,
 };
 
-export const ACCENTS: AccentColor[] = ['blue', 'cyan', 'green', 'amber', 'orange', 'red', 'purple', 'pink'];
+export const ACCENTS: AccentColor[] = ['blue', 'teal', 'green', 'yellow', 'orange', 'red', 'pink', 'purple', 'slate'];
 
 export function emptySnapshot(providerId: string): ProviderSnapshot {
     return {
@@ -192,18 +151,15 @@ export function emptySnapshot(providerId: string): ProviderSnapshot {
         error: null,
         errorInfo: null,
         plan: null,
+        account: null,
         windows: [],
         totals: {...EMPTY_TOTALS},
         todayTotals: {...EMPTY_TOTALS},
         monthTotals: {...EMPTY_TOTALS},
         todayCost: null,
         monthCost: null,
-        indexedFiles: 0,
-        indexedBytes: 0,
         quotaFetchedAt: null,
-        quotaDataChangedAt: null,
         localHistoryUpdatedAt: null,
-        resetCreditsFetchedAt: null,
         resetCredits: null,
     };
 }

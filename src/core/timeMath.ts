@@ -1,3 +1,5 @@
+import {formatText, type Translator} from './i18n.js';
+
 export interface DurationParts {
     expired: boolean;
     totalMinutes: number;
@@ -7,11 +9,12 @@ export interface DurationParts {
 }
 
 export function durationUntil(targetAt: number | null, now = Date.now()): DurationParts | null {
-    if (!Number.isFinite(targetAt)) return null;
-    const difference = (targetAt as number) - now;
+    if (targetAt === null || !Number.isFinite(targetAt))
+        return null;
+    const difference = targetAt - now;
     const remaining = difference > 0 && difference < 60000 ? 0 : Math.max(0, Math.ceil(difference / 60000));
     return {
-        expired: (targetAt as number) <= now,
+        expired: targetAt <= now,
         totalMinutes: remaining,
         days: Math.floor(remaining / 1440),
         hours: Math.floor((remaining % 1440) / 60),
@@ -19,15 +22,16 @@ export function durationUntil(targetAt: number | null, now = Date.now()): Durati
     };
 }
 
-export function formatResetDuration(parts: DurationParts | null): string {
-    if (!parts) return 'reset unknown';
-    if (parts.expired) return 'now';
-    if (parts.totalMinutes < 1) return 'less than 1m';
-    if (parts.days > 0) return `${parts.days}d ${parts.hours}h ${parts.minutes}m`;
-    if (parts.hours > 0) return `${parts.hours}h ${parts.minutes}m`;
-    return `${parts.minutes}m`;
-}
-
-export function formatResetCountdown(targetAt: number | null, now = Date.now()): string {
-    return formatResetDuration(durationUntil(targetAt, now));
+// `compact` drops the minutes once a duration reaches whole days.
+export function formatDuration(tr: Translator, parts: DurationParts, compact = false): string {
+    const {_} = tr;
+    if (parts.totalMinutes < 1)
+        return _('less than 1m');
+    if (parts.days > 0 && compact)
+        return formatText(_('%dd %dh'), parts.days, parts.hours);
+    if (parts.days > 0)
+        return formatText(_('%dd %dh %dm'), parts.days, parts.hours, parts.minutes);
+    if (parts.hours > 0)
+        return formatText(_('%dh %dm'), parts.hours, parts.minutes);
+    return formatText(_('%dm'), parts.minutes);
 }

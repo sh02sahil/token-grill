@@ -2,10 +2,8 @@ import type {AccentColor, CanonicalQuotaWindow, ProviderKind, QuotaWindowPrefere
 
 export interface ProviderMetadata {
     label: string;
-    defaultAccountHome: string;
     defaultAccent: AccentColor;
     iconFile: string;
-    darkIconFile: string;
     quotaWindows: CanonicalQuotaWindow[];
     defaultQuotaWindow: QuotaWindowPreference;
     localHistorySupported: boolean;
@@ -14,51 +12,44 @@ export interface ProviderMetadata {
 export const PROVIDER_METADATA: Record<ProviderKind, ProviderMetadata> = {
     codex: {
         label: 'Codex',
-        defaultAccountHome: '~/.codex',
         defaultAccent: 'green',
-        iconFile: 'openai-blossom-light.svg',
-        darkIconFile: 'openai-blossom-dark.svg',
+        iconFile: 'codex-symbolic.svg',
         quotaWindows: ['five-hour', 'weekly'],
         defaultQuotaWindow: 'automatic',
         localHistorySupported: true,
     },
     claude: {
         label: 'Claude',
-        defaultAccountHome: '~/.claude',
         defaultAccent: 'orange',
-        iconFile: 'claude-mark-light.svg',
-        darkIconFile: 'claude-mark-dark.svg',
+        iconFile: 'claude-symbolic.svg',
         quotaWindows: ['five-hour', 'weekly'],
         defaultQuotaWindow: 'automatic',
         localHistorySupported: true,
     },
     kiro: {
         label: 'Kiro',
-        defaultAccountHome: '$XDG_DATA_HOME/kiro-cli',
         defaultAccent: 'purple',
-        iconFile: 'kiro-icon.png',
-        darkIconFile: 'kiro-icon.png',
+        iconFile: 'kiro-symbolic.svg',
         quotaWindows: ['monthly'],
         defaultQuotaWindow: 'monthly',
         localHistorySupported: false,
     },
     antigravity: {
         label: 'Antigravity',
-        defaultAccountHome: '~/.antigravity',
-        defaultAccent: 'cyan',
-        iconFile: 'antigravity-mark-light.svg',
-        darkIconFile: 'antigravity-mark-dark.svg',
+        defaultAccent: 'teal',
+        iconFile: 'antigravity-symbolic.svg',
         quotaWindows: ['five-hour', 'weekly'],
         defaultQuotaWindow: 'automatic',
         localHistorySupported: false,
     },
 };
 
+export const PROVIDER_KINDS = Object.keys(PROVIDER_METADATA) as ProviderKind[];
+
 export function providerMetadata(kind: ProviderKind): ProviderMetadata {
     return PROVIDER_METADATA[kind];
 }
 
-export function providerIconFile(kind: ProviderKind, appearance: 'light' | 'dark' = 'light'): string {
-    const metadata = providerMetadata(kind);
-    return appearance === 'dark' ? metadata.darkIconFile : metadata.iconFile;
+export function providerIconFile(kind: ProviderKind): string {
+    return providerMetadata(kind).iconFile;
 }
