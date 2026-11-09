@@ -163,7 +163,7 @@ function withSignInHint(tr: Translator, kind: ProviderKind, message: string): st
     const {_} = tr;
     const templates: Record<ProviderKind, string> = {
         codex: _('%s Run codex login.'),
-        claude: _('%s Run claude and sign in.'),
+        claude: _('%s Run claude auth login.'),
         kiro: _('%s Run kiro-cli login.'),
         antigravity: _('%s Sign in again with Antigravity or agy.'),
     };

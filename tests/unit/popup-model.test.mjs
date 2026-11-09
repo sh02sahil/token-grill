@@ -98,9 +98,14 @@ test('error text adds the service-specific fix once', () => {
     const snapshot = (error, recovery) => ({error, errorInfo: {recovery}});
     assert.equal(errorText(tr, snapshot('kiro-cli is not signed in.', 'reauthenticate'), {kind: 'kiro'}), 'kiro-cli is not signed in. Run kiro-cli login.');
     assert.equal(errorText(tr, snapshot('The Codex sign-in has expired.', 'reauthenticate'), {kind: 'codex'}), 'The Codex sign-in has expired. Run codex login.');
-    assert.equal(errorText(tr, snapshot('Claude Code is not signed in.', 'reauthenticate'), {kind: 'claude'}), 'Claude Code is not signed in. Run claude and sign in.');
+    assert.equal(errorText(tr, snapshot('Claude Code is not signed in.', 'reauthenticate'), {kind: 'claude'}), 'Claude Code is not signed in. Run claude auth login.');
     assert.equal(errorText(tr, snapshot('The service did not answer in time.', 'retry'), {kind: 'codex'}), 'The service did not answer in time. Try again later.');
     assert.equal(errorText(tr, snapshot('Kiro accounts need the Gda 5.0 library (gir1.2-gda-5.0).', 'none'), {kind: 'kiro'}),
         'Kiro accounts need the Gda 5.0 library (gir1.2-gda-5.0).');
     assert.equal(errorText(tr, {error: null}, {kind: 'kiro'}), null);
+});
+
+test('claude reauthentication hint names claude auth login', () => {
+    const snapshot = {error: 'The Claude Code sign-in has expired.', errorInfo: {code: 'auth-expired', message: 'The Claude Code sign-in has expired.', recovery: 'reauthenticate'}};
+    assert.equal(errorText(UNTRANSLATED, snapshot, {kind: 'claude'}), 'The Claude Code sign-in has expired. Run claude auth login.');
 });
