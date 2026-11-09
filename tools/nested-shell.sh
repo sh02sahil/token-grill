@@ -4,10 +4,11 @@
 set -euo pipefail
 
 # The bus name appears before the extension manager has scanned the extensions,
-# so `info` fails at first; that counts as no state yet.
+# so `info` fails at first; that counts as no state yet. The C locale keeps the
+# "State" label untranslated.
 extension_state() {
     local info
-    info="$(gnome-extensions info "$uuid" 2>/dev/null)" || return 0
+    info="$(LC_ALL=C gnome-extensions info "$uuid" 2>/dev/null)" || return 0
     if [[ "$info" =~ State:\ ([A-Z_]+) ]]; then
         echo "${BASH_REMATCH[1]}"
     fi
