@@ -135,6 +135,17 @@ export class ProviderEditorDialog extends Adw.Dialog {
         identity.add(this._home);
         page.add(identity);
 
+        const collection = new Adw.PreferencesGroup({title: _('Collection')});
+        this._live = new Adw.SwitchRow({
+            title: _('Live Quota'),
+            subtitle: _('Read the service quota endpoint using this account'),
+            active: this._base.liveUsageEnabled,
+        });
+        this._history = new Adw.SwitchRow({title: _('Local History'), active: this._base.localHistoryEnabled});
+        collection.add(this._live);
+        collection.add(this._history);
+        page.add(collection);
+
         const accent = new Adw.PreferencesGroup({
             title: _('Account Accent'),
             description: _('Accent colors tell accounts of the same service apart'),
@@ -178,16 +189,6 @@ export class ProviderEditorDialog extends Adw.Dialog {
         panel.add(this._quotaWindow);
         page.add(panel);
 
-        const collection = new Adw.PreferencesGroup({title: _('Collection')});
-        this._live = new Adw.SwitchRow({
-            title: _('Live Quota'),
-            subtitle: _('Read the service quota endpoint using this account'),
-            active: this._base.liveUsageEnabled,
-        });
-        this._history = new Adw.SwitchRow({title: _('Local History'), active: this._base.localHistoryEnabled});
-        collection.add(this._live);
-        collection.add(this._history);
-        page.add(collection);
 
         if (provider)
             page.add(this._buildRemoval());
