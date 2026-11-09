@@ -4,7 +4,7 @@ import {formatTokenCount, type HistoryMetrics} from './historyMetrics.js';
 import {formatText, type Translator} from './i18n.js';
 import {providerMetadata} from './providerMetadata.js';
 import {durationUntil, formatDuration} from './timeMath.js';
-import type {ProviderInstance, ProviderKind, ProviderRuntimeState, ProviderSnapshot, UsageWindow} from './types.js';
+import type {AccountApp, ProviderInstance, ProviderKind, ProviderRuntimeState, ProviderSnapshot, UsageWindow} from './types.js';
 
 export interface ChooserAccount {
     id: string;
@@ -159,8 +159,10 @@ export function historySummary(tr: Translator, metrics: HistoryMetrics): string 
 }
 
 // Provider messages state the problem; the fix is added here once, per service.
-function withSignInHint(tr: Translator, kind: ProviderKind, message: string): string {
+function withSignInHint(tr: Translator, kind: ProviderKind, app: AccountApp, message: string): string {
     const {_} = tr;
+    if (app === 'opencode')
+        return formatText(_('%s Open OpenCode and sign in again.'), message);
     const templates: Record<ProviderKind, string> = {
         codex: _('%s Run codex login.'),
         claude: _('%s Run claude auth login.'),
@@ -170,13 +172,13 @@ function withSignInHint(tr: Translator, kind: ProviderKind, message: string): st
     return formatText(templates[kind], message);
 }
 
-export function errorText(tr: Translator, snapshot: Pick<ProviderSnapshot, 'error' | 'errorInfo'> | null, instance: Pick<ProviderInstance, 'kind'>): string | null {
+export function errorText(tr: Translator, snapshot: Pick<ProviderSnapshot, 'error' | 'errorInfo'> | null, instance: Pick<ProviderInstance, 'kind' | 'app'>): string | null {
     const {_} = tr;
     if (!snapshot?.error)
         return null;
     switch (snapshot.errorInfo?.recovery) {
     case 'reauthenticate':
-        return withSignInHint(tr, instance.kind, snapshot.error);
+        return withSignInHint(tr, instance.kind, instance.app, snapshot.error);
     case 'retry':
         return formatText(_('%s Try again later.'), snapshot.error);
     default:

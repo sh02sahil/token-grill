@@ -3,7 +3,7 @@ export type AccentColor = 'blue' | 'teal' | 'green' | 'yellow' | 'orange' | 'red
 // A palette name, or a colour the user picked as #rrggbb.
 export type AccentValue = AccentColor | `#${string}`;
 // The app whose sign-in an account reads.
-export type AccountApp = 'codex-cli' | 'claude-code' | 'kiro-cli' | 'antigravity';
+export type AccountApp = 'codex-cli' | 'claude-code' | 'kiro-cli' | 'antigravity' | 'opencode';
 export type QuotaWindowPreference = 'automatic' | 'five-hour' | 'weekly' | 'monthly';
 export type PanelPercentageMode = 'remaining' | 'used';
 export type PanelDisplayStyle = 'text' | 'ring' | 'bar';

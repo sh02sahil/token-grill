@@ -135,6 +135,8 @@ export function normalizeProvider(value: unknown): ProviderInstance[] {
         return [];
 
     const metadata = providerMetadata(item.kind);
+    // Local history is read from the service's own app; other apps only lend their sign-in.
+    const app = normalizeApp(item.app, metadata.apps);
     const storedWindow = item.panelWindowPreference as QuotaWindowPreference;
     let panelWindowPreference = QUOTA_WINDOW_PREFERENCES.includes(storedWindow) ? storedWindow : metadata.defaultQuotaWindow;
     if (metadata.quotaWindows.length === 1 && panelWindowPreference !== metadata.quotaWindows[0])
@@ -145,7 +147,7 @@ export function normalizeProvider(value: unknown): ProviderInstance[] {
         schemaVersion: ENTRY_SCHEMA_VERSION,
         id: item.id,
         kind: item.kind,
-        app: normalizeApp(item.app, metadata.apps),
+        app,
         displayName: displayName || metadata.label,
         accent: normalizeAccent(item.accent, metadata.defaultAccent),
         enabled: item.enabled !== false,
@@ -155,7 +157,7 @@ export function normalizeProvider(value: unknown): ProviderInstance[] {
         authFileOverride: optionalPath(item.authFileOverride),
         sessionsDirectoryOverride: optionalPath(item.sessionsDirectoryOverride),
         liveUsageEnabled: item.liveUsageEnabled !== false,
-        localHistoryEnabled: metadata.localHistorySupported && item.localHistoryEnabled === true,
+        localHistoryEnabled: metadata.localHistorySupported && app === metadata.apps[0] && item.localHistoryEnabled === true,
         panelWindowPreference,
         topBar: normalizeTopBar(item.topBar),
         lowBalance: typeof item.lowBalance === 'number' && Number.isFinite(item.lowBalance) && item.lowBalance >= 0 ? item.lowBalance : null,

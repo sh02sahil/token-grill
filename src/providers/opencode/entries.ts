@@ -1,5 +1,6 @@
 // OpenCode keeps every sign-in in one auth.json, keyed by its provider id.
 // Field names are the ones OpenCode writes: type, access, refresh, expires, accountId, key.
+import {CollectorError} from '../../core/errors.js';
 import {isRecord, numberAt, stringAt} from '../../core/json.js';
 import type {ProviderKind} from '../../core/types.js';
 
@@ -47,6 +48,17 @@ export function parseOpenCodeAuth(payload: Record<string, unknown>): Map<string,
             entries.set(id, entry);
     }
     return entries;
+}
+
+// OpenCode refreshes its own sign-ins; Token Grill only reads them.
+export function openCodeAccessToken(entry: OpenCodeEntry | undefined, now: number): string {
+    if (!entry)
+        throw new CollectorError('auth-missing', ({_}) => _('OpenCode is not signed in to this service.'));
+    if (entry.type !== 'oauth')
+        throw new CollectorError('auth-invalid', ({_}) => _('OpenCode holds an API key for this service, not a sign-in.'));
+    if (entry.expires !== null && entry.expires <= now)
+        throw new CollectorError('auth-expired', ({_}) => _('The OpenCode sign-in has expired.'));
+    return entry.access;
 }
 
 export function matchOpenCodeEntry(id: string, entry: OpenCodeEntry): OpenCodeMatch {

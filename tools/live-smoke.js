@@ -2,13 +2,16 @@
 // modules, outside GNOME Shell. Run `npm run build` first.
 //
 //     gjs -m tools/live-smoke.js <codex|claude|kiro|antigravity> [account-home] [auth-file]
+//     gjs -m tools/live-smoke.js <codex|claude> --app opencode
 //
 // Prints the outcome and the usage windows only: no tokens and no e-mail address.
 import GLib from 'gi://GLib';
 import Soup from 'gi://Soup?version=3.0';
 import Gio from 'gi://Gio';
 
-const [kind, home, authFile] = ARGV;
+const [kind, ...rest] = ARGV;
+const app = rest[0] === '--app' ? rest[1] : null;
+const [home, authFile] = app ? [] : rest;
 const root = GLib.path_get_dirname(GLib.path_get_dirname(GLib.filename_from_uri(import.meta.url)[0]));
 const [, metadata] = GLib.file_get_contents(`${root}/metadata.json`);
 const dist = `${root}/dist/${JSON.parse(new TextDecoder().decode(metadata)).uuid}`;
@@ -30,7 +33,7 @@ if (!(kind in collectors)) {
     console.error('Usage: gjs -m tools/live-smoke.js <codex|claude|kiro|antigravity> [account-home] [auth-file]');
     throw new Error(`Unknown kind: ${kind}`);
 }
-const instance = {...newProvider(kind, providerMetadata(kind).apps[0], home ?? defaultHome(kind)), authFileOverride: authFile ?? null};
+const instance = {...newProvider(kind, app ?? providerMetadata(kind).apps[0], home ?? defaultHome(kind)), authFileOverride: authFile ?? null};
 const session = new Soup.Session({timeout: 30, user_agent: base.USER_AGENT});
 const cancellable = new Gio.Cancellable();
 const context = {
@@ -49,7 +52,7 @@ const context = {
 const database = providerPaths(instance).authFile;
 const stampBefore = kind === 'kiro' ? await kiroAuth.kiroDatabaseStamp(database, null) : null;
 
-console.log(`${kind} ${displayPath(instance.accountHome)}`);
+console.log(`${kind} via ${instance.app} ${displayPath(providerPaths(instance).authFile)}`);
 const snapshot = await collectors[kind].collect(instance, context, emptySnapshot(instance.id));
 console.log(`  state: ${snapshot.state}${snapshot.errorInfo ? ` (${snapshot.errorInfo.code}: ${snapshot.error})` : ''}`);
 console.log(`  plan: ${snapshot.plan ?? 'none'}; account reported: ${snapshot.account !== null}`);

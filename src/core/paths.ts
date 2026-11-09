@@ -53,8 +53,14 @@ export function defaultHome(kind: ProviderKind): string {
     return GLib.build_filenamev([GLib.get_home_dir(), ...DEFAULT_HOMES[kind]]);
 }
 
+export function openCodeAuthPath(): string {
+    return GLib.build_filenamev([GLib.get_user_data_dir(), 'opencode', 'auth.json']);
+}
+
 // Normalized providers always hold valid paths, so this never throws for them.
 export function providerPaths(instance: ProviderInstance): ProviderPaths {
+    if (instance.app === 'opencode')
+        return {authFile: openCodeAuthPath(), historyDirectories: []};
     const home = expandPath(instance.accountHome);
     const authFile = instance.authFileOverride
         ? expandPath(instance.authFileOverride)

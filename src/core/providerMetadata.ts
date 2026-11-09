@@ -20,7 +20,7 @@ export const PROVIDER_METADATA: Record<ProviderKind, ProviderMetadata> = {
         quotaWindows: ['five-hour', 'weekly'],
         defaultQuotaWindow: 'automatic',
         localHistorySupported: true,
-        apps: ['codex-cli'],
+        apps: ['codex-cli', 'opencode'],
         measure: 'limits',
     },
     claude: {
@@ -30,7 +30,7 @@ export const PROVIDER_METADATA: Record<ProviderKind, ProviderMetadata> = {
         quotaWindows: ['five-hour', 'weekly'],
         defaultQuotaWindow: 'automatic',
         localHistorySupported: true,
-        apps: ['claude-code'],
+        apps: ['claude-code', 'opencode'],
         measure: 'limits',
     },
     kiro: {

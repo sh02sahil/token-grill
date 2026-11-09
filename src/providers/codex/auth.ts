@@ -6,6 +6,8 @@ import {parseRecord, recordAt, stringAt, toEpochMs} from '../../core/json.js';
 import {providerPaths} from '../../core/paths.js';
 import type {ProviderInstance} from '../../core/types.js';
 import {readCredentialJson} from '../credentials.js';
+import {readOpenCodeEntries} from '../opencode/authFile.js';
+import {openCodeAccessToken} from '../opencode/entries.js';
 
 // Codex keeps the access token as a JWT; its `exp` claim tells whether a request is worth sending.
 function jwtExpiry(token: string): number | null {
@@ -18,6 +20,8 @@ function jwtExpiry(token: string): number | null {
 }
 
 export async function loadCodexAccessToken(instance: ProviderInstance, cancellable: Gio.Cancellable | null): Promise<string> {
+    if (instance.app === 'opencode')
+        return openCodeAccessToken((await readOpenCodeEntries(cancellable)).get('openai'), Date.now());
     const payload = await readCredentialJson(providerPaths(instance).authFile, cancellable);
     const tokens = recordAt(payload, 'tokens');
     const accessToken = tokens ? stringAt(tokens, 'access_token') : null;

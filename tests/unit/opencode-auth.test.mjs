@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {matchOpenCodeEntry, parseOpenCodeAuth} from '../../build/tests/opencode-entries.mjs';
+import {matchOpenCodeEntry, openCodeAccessToken, parseOpenCodeAuth} from '../../build/tests/opencode-entries.mjs';
 
 // The field names seen in a real OpenCode auth.json (values replaced).
 const auth = {
@@ -39,4 +39,24 @@ test('Kiro in OpenCode uses the Kiro app sign-in', () => {
 
 test('other providers are nothing to track', () => {
     assert.deepEqual(matchOpenCodeEntry('chutes', {type: 'api', key: 'k'}), {status: 'nothing-to-track'});
+});
+
+const NOW = 1794200000000;
+const oauth = expires => ({type: 'oauth', access: 'a-token', refresh: 'r', expires, accountId: null});
+
+test('a valid OpenCode sign-in gives its access token', () => {
+    assert.equal(openCodeAccessToken(oauth(NOW + 60000), NOW), 'a-token');
+    assert.equal(openCodeAccessToken(oauth(null), NOW), 'a-token');
+});
+
+test('an expired OpenCode sign-in reports auth-expired', () => {
+    assert.throws(() => openCodeAccessToken(oauth(NOW - 1), NOW), {code: 'auth-expired'});
+});
+
+test('an OpenCode API key where a sign-in is needed is auth-invalid', () => {
+    assert.throws(() => openCodeAccessToken({type: 'api', key: 'k'}, NOW), {code: 'auth-invalid'});
+});
+
+test('a missing OpenCode sign-in is auth-missing', () => {
+    assert.throws(() => openCodeAccessToken(undefined, NOW), {code: 'auth-missing'});
 });
