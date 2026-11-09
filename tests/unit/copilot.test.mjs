@@ -46,3 +46,16 @@ test('the GitHub CLI hosts file gives the active user, and a token only when sto
     assert.deepEqual(parseGhHosts(plain), {user: 'bob', token: 'gho_plain'});
     assert.deepEqual(parseGhHosts('enterprise.example:\n    user: carol\n'), {user: null, token: null});
 });
+
+test('AI Credits plans count credits used out of the entitlement', () => {
+    const {windows} = normalizeCopilotUsage(response({
+        chat: snapshot(0, 100, {unlimited: true}),
+        premium_interactions: snapshot(300, 99, {token_based_billing: true, credits_used: 120}),
+    }, 'monthly_subscriber'));
+    assert.deepEqual(windows.map(window => [window.id, window.percent, window.used, window.limit, window.unit]), [['premium_interactions', 0.4, 120, 300, 'credits']]);
+});
+
+test('request-based plans keep the percentage the service reports', () => {
+    const {windows} = normalizeCopilotUsage(response({premium_interactions: snapshot(300, 40, {token_based_billing: false, credits_used: 0})}, 'monthly_subscriber'));
+    assert.deepEqual(windows.map(window => [window.percent, window.unit]), [[0.6, null]]);
+});

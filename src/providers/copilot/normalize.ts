@@ -1,6 +1,8 @@
 // Field names from a real copilot_internal/user response (Copilot Free, 2026-11):
 // quota_snapshots.{chat, completions, premium_interactions}, each with entitlement,
-// percent_remaining and unlimited, plus quota_reset_date_utc and access_type_sku.
+// percent_remaining, unlimited, token_based_billing and credits_used, plus
+// quota_reset_date_utc and access_type_sku. ghcp-spend-tray reads the same
+// credits fields for AI Credits plans.
 import {CollectorError} from '../../core/errors.js';
 import {isRecord, numberAt, recordAt, stringAt, toEpochMs} from '../../core/json.js';
 import type {CanonicalQuotaWindow, UsageWindow} from '../../core/types.js';
@@ -23,11 +25,17 @@ function snapshotWindow(snapshot: unknown, id: string, canonicalWindow: Canonica
     if (!isRecord(snapshot) || snapshot.unlimited === true)
         return null;
     const entitlement = numberAt(snapshot, 'entitlement');
-    const percentRemaining = numberAt(snapshot, 'percent_remaining');
-    if (entitlement === null || entitlement <= 0 || percentRemaining === null)
+    if (entitlement === null || entitlement <= 0)
         return null;
-    const percent = Math.max(0, Math.min(1, 1 - percentRemaining / 100));
-    return {id, canonicalWindow, label: windowLabel(canonicalWindow, label), used: null, limit: null, percent, resetAt, unit: null};
+    const base = {id, canonicalWindow, label: windowLabel(canonicalWindow, label), resetAt};
+    // Plans billed in AI Credits report the credits spent; count them out of the entitlement.
+    const creditsUsed = snapshot.token_based_billing === true ? numberAt(snapshot, 'credits_used') : null;
+    if (creditsUsed !== null && creditsUsed >= 0)
+        return {...base, used: creditsUsed, limit: entitlement, percent: Math.min(1, creditsUsed / entitlement), unit: 'credits'};
+    const percentRemaining = numberAt(snapshot, 'percent_remaining');
+    if (percentRemaining === null)
+        return null;
+    return {...base, used: null, limit: null, percent: Math.max(0, Math.min(1, 1 - percentRemaining / 100)), unit: null};
 }
 
 export function normalizeCopilotUsage(payload: unknown): CopilotUsage {
