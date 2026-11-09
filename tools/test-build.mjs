@@ -38,6 +38,7 @@ const giStubs = {
 const MODULES = [
     ['src/core/accent.ts', 'accent.mjs'],
     ['src/core/config.ts', 'config.mjs'],
+    ['src/core/diagnostics.ts', 'diagnostics.mjs'],
     ['src/core/display.ts', 'display.mjs'],
     ['src/core/errors.ts', 'errors.mjs'],
     ['src/core/historyMetrics.ts', 'history-metrics.mjs'],
