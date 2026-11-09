@@ -63,6 +63,16 @@ export const PROVIDER_METADATA: Record<ProviderKind, ProviderMetadata> = {
         apps: ['github-cli', 'copilot-cli', 'opencode'],
         measure: 'limits',
     },
+    'opencode-go': {
+        label: 'OpenCode Go',
+        defaultAccent: 'yellow',
+        iconFile: 'opencode-go-symbolic.svg',
+        quotaWindows: ['five-hour', 'weekly', 'monthly'],
+        defaultQuotaWindow: 'automatic',
+        localHistorySupported: false,
+        apps: ['opencode'],
+        measure: 'limits',
+    },
 };
 
 export const PROVIDER_KINDS = Object.keys(PROVIDER_METADATA) as ProviderKind[];

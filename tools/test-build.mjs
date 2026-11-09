@@ -67,6 +67,7 @@ const MODULES = [
     ['src/providers/kiro/normalize.ts', 'kiro-normalize.mjs'],
     ['src/providers/kiro/usagePolicy.ts', 'kiro-usage-policy.mjs'],
     ['src/providers/opencode/entries.ts', 'opencode-entries.mjs'],
+    ['src/providers/opencode-go/normalize.ts', 'opencode-go-normalize.mjs'],
 ];
 
 await rm(out, {recursive: true, force: true});

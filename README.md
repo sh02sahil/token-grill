@@ -98,6 +98,7 @@ connects only to these hosts:
 | Antigravity | `cloudcode-pa.googleapis.com`                                                                                 | Plan and usage limits                   |
 | Antigravity | `oauth2.googleapis.com`                                                                                       | A new token when the sign-in is expired |
 | Copilot     | `api.github.com`                                                                                              | Monthly allowances                      |
+| OpenCode Go | `opencode.ai`                                                                                                 | Usage limits                            |
 
 Each request obeys these limits:
 

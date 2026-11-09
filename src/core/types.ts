@@ -1,4 +1,4 @@
-export type ProviderKind = 'codex' | 'claude' | 'kiro' | 'antigravity' | 'copilot';
+export type ProviderKind = 'codex' | 'claude' | 'kiro' | 'antigravity' | 'copilot' | 'opencode-go';
 export type AccentColor = 'blue' | 'teal' | 'green' | 'yellow' | 'orange' | 'red' | 'pink' | 'purple' | 'slate';
 // A palette name, or a colour the user picked as #rrggbb.
 export type AccentValue = AccentColor | `#${string}`;

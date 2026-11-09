@@ -10,6 +10,7 @@ import {loadClaudeAccessToken} from '../providers/claude/auth.js';
 import {loadCodexAccessToken} from '../providers/codex/auth.js';
 import {loadCopilotToken} from '../providers/copilot/auth.js';
 import {kiroCredentialStatus} from '../providers/kiro/auth.js';
+import {loadOpenCodeGoKey} from '../providers/opencode-go/auth.js';
 
 export type CredentialState =
     | 'authenticated'
@@ -56,7 +57,8 @@ const CREDENTIAL_CHECKS: Record<ProviderKind, (provider: ProviderInstance, cance
     claude: (provider, cancellable) => authFileState(loadClaudeAccessToken(provider, cancellable)),
     kiro: kiroState,
     antigravity: antigravityState,
-    copilot: (provider, cancellable) => authFileState(loadCopilotToken(provider, cancellable)),
+    'copilot': (provider, cancellable) => authFileState(loadCopilotToken(provider, cancellable)),
+    'opencode-go': (_provider, cancellable) => authFileState(loadOpenCodeGoKey(cancellable)),
 };
 
 // Rejects only when cancelled or on an unexpected error.

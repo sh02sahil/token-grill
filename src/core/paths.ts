@@ -8,7 +8,8 @@ const DEFAULT_HOMES: Record<ProviderKind, string[]> = {
     claude: ['.claude'],
     kiro: [],
     antigravity: ['.gemini', 'antigravity-cli'],
-    copilot: ['.config', 'gh'],
+    'copilot': ['.config', 'gh'],
+    'opencode-go': [],
 };
 
 // Antigravity tools have written their OAuth credentials under each of these names.
@@ -19,7 +20,8 @@ const AUTH_FILES: Record<ProviderKind, string> = {
     claude: '.credentials.json',
     kiro: 'data.sqlite3',
     antigravity: 'acp_token.json',
-    copilot: 'hosts.yml',
+    'copilot': 'hosts.yml',
+    'opencode-go': 'auth.json',
 };
 
 const HISTORY_DIRECTORIES: Record<ProviderKind, string[]> = {
@@ -27,7 +29,8 @@ const HISTORY_DIRECTORIES: Record<ProviderKind, string[]> = {
     claude: ['projects'],
     kiro: [],
     antigravity: [],
-    copilot: [],
+    'copilot': [],
+    'opencode-go': [],
 };
 
 export function expandPath(value: string): string {
@@ -53,6 +56,8 @@ export function displayPath(value: string): string {
 export function defaultHome(kind: ProviderKind): string {
     if (kind === 'kiro')
         return GLib.build_filenamev([GLib.get_user_data_dir(), 'kiro-cli']);
+    if (kind === 'opencode-go')
+        return GLib.build_filenamev([GLib.get_user_data_dir(), 'opencode']);
     return GLib.build_filenamev([GLib.get_home_dir(), ...DEFAULT_HOMES[kind]]);
 }
 

@@ -18,6 +18,8 @@ const OPENCODE_SERVICES: Record<string, {kind: ProviderKind; entry: OpenCodeEntr
     openai: {kind: 'codex', entry: 'oauth'},
     anthropic: {kind: 'claude', entry: 'oauth'},
     'github-copilot': {kind: 'copilot', entry: 'oauth'},
+    'opencode-go': {kind: 'opencode-go', entry: 'api'},
+    'opencode': {kind: 'opencode-go', entry: 'api'},
 };
 
 // OpenCode's Kiro plugin uses kiro-cli's own sign-in, so the account is added from the Kiro app.

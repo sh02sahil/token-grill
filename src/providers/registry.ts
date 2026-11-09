@@ -5,6 +5,7 @@ import {ClaudeCollector} from './claude/collector.js';
 import {CodexCollector} from './codex/collector.js';
 import {CopilotCollector} from './copilot/collector.js';
 import {KiroCollector} from './kiro/collector.js';
+import {OpenCodeGoCollector} from './opencode-go/collector.js';
 
 // Collectors hold only in-memory token caches, so they are released by dropping them.
 export function createCollectors(): Record<ProviderKind, ProviderCollector> {
@@ -13,6 +14,7 @@ export function createCollectors(): Record<ProviderKind, ProviderCollector> {
         claude: new ClaudeCollector(),
         kiro: new KiroCollector(),
         antigravity: new AntigravityCollector(),
-        copilot: new CopilotCollector(),
+        'copilot': new CopilotCollector(),
+        'opencode-go': new OpenCodeGoCollector(),
     };
 }

@@ -28,7 +28,7 @@ Gio._promisify(Soup.Session.prototype, 'send_and_read_async', 'send_and_read_fin
 // libsoup applies the session's User-Agent to every request, so this one
 // string names every monitored service: the Antigravity quota API answers 403
 // to clients whose User-Agent does not mention Antigravity.
-export const USER_AGENT = 'TokenGrill (+https://github.com/sh02sahil/token-grill; usage monitor for Codex, Claude, Kiro, Antigravity and Copilot)';
+export const USER_AGENT = 'TokenGrill (+https://github.com/sh02sahil/token-grill; usage monitor for Codex, Claude, Kiro, Antigravity, Copilot and OpenCode Go)';
 
 const MAX_RESPONSE_BYTES = 1024 * 1024;
 const MONTH_MS = 30 * 24 * 60 * 60 * 1000;
@@ -38,6 +38,7 @@ const ALLOWED_HOSTS = new Set([
     'chatgpt.com',
     'cloudcode-pa.googleapis.com',
     'oauth2.googleapis.com',
+    'opencode.ai',
     ...KIRO_SERVICE_HOSTS,
 ]);
 const KIRO_OIDC_HOST = /^oidc\.[a-z0-9-]+\.amazonaws\.com$/;
