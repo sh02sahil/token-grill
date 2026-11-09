@@ -39,6 +39,8 @@ const cancellable = new Gio.Cancellable();
 const context = {
     aggregates: null,
     checkpoints: null,
+    // A one-off run has no earlier balance to compare with.
+    balances: {get: () => null, set: () => {}, flush: () => Promise.resolve()},
     catalog: {},
     cancellable,
     tr: UNTRANSLATED,

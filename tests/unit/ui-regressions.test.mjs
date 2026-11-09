@@ -249,11 +249,11 @@ test('UI signals are disconnected and owned actors are released', async () => {
 
 test('runtime releases all lifecycle-owned references during stop', async () => {
     const source = await read('src/runtime.ts');
-    for (const name of ['scheduler', 'session', 'collectors', 'aggregates', 'checkpoints', 'notifications', 'settings', 'cancellable', 'indicator'])
+    for (const name of ['scheduler', 'session', 'collectors', 'aggregates', 'checkpoints', 'balances', 'notifications', 'settings', 'cancellable', 'indicator'])
         assert.match(source, new RegExp(`this\\._${name} = null`));
     assert.match(source, /this\._settingsChangedId = null/);
     assert.match(source, /this\._session!\.abort\(\)/);
-    assert.match(source, /Promise\.all\(\[this\._aggregates!\.flush\(\), this\._checkpoints!\.flush\(\), this\._notifications!\.flush\(\)\]\)/);
+    assert.match(source, /Promise\.all\(\[this\._aggregates!\.flush\(\), this\._checkpoints!\.flush\(\), this\._balances!\.flush\(\), this\._notifications!\.flush\(\)\]\)/);
 });
 
 test('store writes are serialized and cancellation bypasses provider failures', async () => {

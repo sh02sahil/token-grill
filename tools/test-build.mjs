@@ -37,6 +37,7 @@ const giStubs = {
 
 const MODULES = [
     ['src/core/accent.ts', 'accent.mjs'],
+    ['src/core/balanceMeter.ts', 'balance-meter.mjs'],
     ['src/core/config.ts', 'config.mjs'],
     ['src/core/diagnostics.ts', 'diagnostics.mjs'],
     ['src/core/display.ts', 'display.mjs'],

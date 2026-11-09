@@ -19,6 +19,7 @@ import type {Translator} from '../core/i18n.js';
 import type {ProviderInstance, ProviderSnapshot, RefreshSource, SourceResult, UsageEvent} from '../core/types.js';
 import type {PricingCatalog} from '../pricing/catalog.js';
 import type {AggregateStore} from '../storage/aggregateStore.js';
+import type {BalanceStore} from '../storage/balanceStore.js';
 import type {CheckpointStore} from '../storage/checkpointStore.js';
 import {scanHistory} from './history.js';
 import {KIRO_SERVICE_HOSTS} from './kiro/endpoints.js';
@@ -52,6 +53,7 @@ export type LimitsUpdate = Partial<Pick<ProviderSnapshot, 'plan' | 'account' | '
 export interface CollectorContext {
     aggregates: AggregateStore;
     checkpoints: CheckpointStore;
+    balances: BalanceStore;
     catalog: PricingCatalog;
     cancellable: Gio.Cancellable;
     tr: Translator;

@@ -28,6 +28,7 @@ import {NotificationStore} from './shell/notifications.js';
 import type {QuotaWindow} from './shell/providerCard.js';
 import {TRANSLATOR} from './shell/translator.js';
 import {AggregateStore} from './storage/aggregateStore.js';
+import {BalanceStore} from './storage/balanceStore.js';
 import {CheckpointStore} from './storage/checkpointStore.js';
 
 const SOURCE_PHASES: Record<RefreshSource, RefreshPhase> = {
@@ -48,6 +49,7 @@ export class Runtime implements IndicatorController {
     private _session: Soup.Session | null = new Soup.Session({timeout: 30, user_agent: USER_AGENT});
     private _aggregates: AggregateStore | null;
     private _checkpoints: CheckpointStore | null;
+    private _balances: BalanceStore | null;
     private _notifications: NotificationStore | null;
     private _collectors: Record<ProviderKind, ProviderCollector> | null = createCollectors();
     private _scheduler: Scheduler | null;
@@ -65,6 +67,7 @@ export class Runtime implements IndicatorController {
         this._settings = extension.getSettings();
         this._aggregates = new AggregateStore(extension.getLogger());
         this._checkpoints = new CheckpointStore(extension.getLogger());
+        this._balances = new BalanceStore(extension.getLogger());
         this._notifications = new NotificationStore(extension);
         this._scheduler = new Scheduler(
             jobs => this._collect(jobs).catch(error => this._extension.getLogger().error(error)),
@@ -99,12 +102,13 @@ export class Runtime implements IndicatorController {
 
         // Final writes touch only our own state files, never Shell objects, so they may finish after disable().
         const logger = this._extension.getLogger();
-        Promise.all([this._aggregates!.flush(), this._checkpoints!.flush(), this._notifications!.flush()])
+        Promise.all([this._aggregates!.flush(), this._checkpoints!.flush(), this._balances!.flush(), this._notifications!.flush()])
             .catch(error => logger.warn(error));
         this._notifications!.destroy();
         this._notifications = null;
         this._aggregates = null;
         this._checkpoints = null;
+        this._balances = null;
         this._settings = null;
 
         this._snapshots.clear();
@@ -156,6 +160,7 @@ export class Runtime implements IndicatorController {
             loadCatalog(`${this._extension.path}/pricing-v1.json`, cancellable),
             this._aggregates!.initialize(cancellable),
             this._checkpoints!.initialize(cancellable),
+            this._balances!.initialize(cancellable),
             this._notifications!.initialize(cancellable),
         ]);
         if (cancellable.is_cancelled())
@@ -225,7 +230,8 @@ export class Runtime implements IndicatorController {
     private _removeStoredHistory(providerIds: string[]): void {
         const aggregates = this._aggregates!;
         const checkpoints = this._checkpoints!;
-        Promise.all(providerIds.flatMap(id => [aggregates.removeProvider(id), checkpoints.removeProvider(id)]))
+        const balances = this._balances!;
+        Promise.all(providerIds.flatMap(id => [aggregates.removeProvider(id), checkpoints.removeProvider(id), balances.removeProvider(id)]))
             .catch(error => this._extension.getLogger().warn(error));
     }
 
@@ -275,6 +281,7 @@ export class Runtime implements IndicatorController {
         const context: CollectorContext = {
             aggregates: this._aggregates!,
             checkpoints: this._checkpoints!,
+            balances: this._balances!,
             catalog: this._catalog,
             cancellable,
             tr: TRANSLATOR,

@@ -136,7 +136,13 @@ function numbers(account: TopBarAccount, mode: PanelPercentageMode): St.Label {
 
 function accountReading(account: TopBarAccount, style: PanelDisplayStyle, mode: PanelPercentageMode): St.Widget {
     const box = new St.BoxLayout({style_class: 'tokengrill-panel-account', y_align: Clutter.ActorAlign.CENTER});
-    if (account.balance) {
+    if (account.limits.length) {
+        box.add_child(style === 'text' ? dot(account) : drawnReading(account, style, mode));
+        if (style === 'text')
+            box.add_child(numbers(account, mode));
+        if (account.low)
+            box.add_child(attention());
+    } else if (account.balance) {
         box.add_child(dot(account));
         box.add_child(new St.Label({text: money(account.balance, true), style_class: 'tokengrill-panel-value', y_align: Clutter.ActorAlign.CENTER}));
         if (account.low)
@@ -144,17 +150,16 @@ function accountReading(account: TopBarAccount, style: PanelDisplayStyle, mode: 
     } else if (account.missing) {
         box.add_child(dot(account));
         box.add_child(attention());
-    } else if (style === 'text') {
-        box.add_child(dot(account));
-        box.add_child(numbers(account, mode));
-    } else {
-        box.add_child(style === 'ring' ? ringStack(account, mode) : barStack(account, mode));
     }
     return box;
 }
 
+function drawnReading(account: TopBarAccount, style: PanelDisplayStyle, mode: PanelPercentageMode): St.DrawingArea {
+    return style === 'ring' ? ringStack(account, mode) : barStack(account, mode);
+}
+
 function accountDescription(account: TopBarAccount, mode: PanelPercentageMode): string {
-    if (account.balance)
+    if (account.balance && !account.limits.length)
         return formatText(_('%s, %s left'), account.name, money(account.balance, false));
     if (account.missing)
         return formatText(_('%s, no reading yet'), account.name);
