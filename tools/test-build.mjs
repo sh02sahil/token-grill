@@ -47,6 +47,7 @@ const MODULES = [
     ['src/core/providerMetadata.ts', 'provider-metadata.mjs'],
     ['src/core/providerOrder.ts', 'provider-order.mjs'],
     ['src/core/timeMath.ts', 'time-math.mjs'],
+    ['src/core/topBar.ts', 'top-bar.mjs'],
     ['src/prefs/providerValidation.ts', 'provider-validation.mjs'],
     ['src/pricing/calculator.ts', 'pricing-calculator.mjs'],
     ['src/providers/antigravity/endpoints.ts', 'antigravity-endpoints.mjs'],
