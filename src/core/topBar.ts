@@ -37,7 +37,7 @@ export interface TopBarGroup {
     accounts: TopBarAccount[];
 }
 
-export function limitKey(window: UsageWindow): string {
+export function limitKey(window: Pick<UsageWindow, 'id' | 'canonicalWindow'>): string {
     return window.canonicalWindow === 'other' ? window.id : window.canonicalWindow;
 }
 

@@ -1,19 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+    balanceNotificationText,
     clampStep,
+    limitNotificationText,
     notificationBucket,
-    milestoneNotificationText,
-    notificationHeader,
+    notificationKey,
     shouldNotifyMilestone,
     parseTestNotificationRequest,
     testNotificationText,
-    windowTitle,
 } from '../../build/tests/notification-policy.mjs';
 import {UNTRANSLATED} from '../../build/tests/i18n.mjs';
 
 const tr = UNTRANSLATED;
-const provider = (preference, kind = 'codex') => ({id: 'codex-personal', kind, displayName: 'Codex - Personal', panelWindowPreference: preference});
+const provider = (topBar, kind = 'codex') => ({id: 'codex-personal', kind, displayName: 'Personal', topBar});
+const auto = {automatic: true, limits: []};
+const NOW = Date.UTC(2026, 10, 10, 12, 0);
+const DAY = 24 * 60 * 60 * 1000;
 const snapshot = {
     windows: [
         {id: 'five', canonicalWindow: 'five-hour', label: 'Five-hour', percent: 0.42},
@@ -39,56 +42,44 @@ test('notification buckets are clamped and step-normalized', () => {
     assert.equal(notificationBucket(0.26, 24), 1);
 });
 
-test('notification titles use header capitalization per window', () => {
-    assert.equal(windowTitle(tr, 'five-hour', 'Session'), 'Five-Hour Usage');
-    assert.equal(windowTitle(tr, 'weekly', 'Weekly'), 'Weekly Usage');
-    assert.equal(windowTitle(tr, 'monthly', 'Monthly credits'), 'Monthly Usage');
-    assert.equal(windowTitle(tr, 'other', 'Daily'), 'Daily Usage');
+test('a limit alert reads service, account, limit and amount', () => {
+    const weekly = {id: 'seven_day', canonicalWindow: 'weekly', label: 'Weekly', percent: 0.88, resetAt: NOW + 2 * DAY};
+    assert.deepEqual(limitNotificationText(tr, 'Claude', {displayName: 'Main'}, weekly, 0.88, 'remaining', NOW), {
+        source: 'Claude · Main',
+        title: 'Weekly: 12% left',
+        body: 'Resets in 2d 0h',
+    });
+    assert.equal(limitNotificationText(tr, 'Claude', {displayName: 'Main'}, weekly, 0.88, 'used', NOW).title, 'Weekly: 88% used');
 });
 
-test('the header names the reading and the account in the display mode', () => {
-    assert.equal(notificationHeader(tr, 'Claude - Team', 0.34, 'remaining'), '66% remaining - Claude - Team | Token Grill');
-    assert.equal(notificationHeader(tr, 'Claude - Team', 0.34, 'used'), '34% used - Claude - Team | Token Grill');
-    assert.equal(notificationHeader(tr, 'Claude - Team', 1.2, 'remaining'), '0% remaining - Claude - Team | Token Grill');
+test('model-specific limits use their label and unknown resets say so', () => {
+    const opus = {id: 'seven_day_opus', canonicalWindow: 'other', label: 'Weekly · Opus', percent: 0.4, resetAt: null};
+    const text = limitNotificationText(tr, 'Claude', {displayName: 'Main'}, opus, 0.4, 'remaining', NOW);
+    assert.equal(text.title, 'Weekly · Opus: 60% left');
+    assert.equal(text.body, 'Reset time unknown');
 });
 
-test('milestone alerts name the window and state the milestone in the display mode', () => {
-    const account = {displayName: 'Claude - Team'};
-    const window = {canonicalWindow: 'five-hour', label: 'Five-hour'};
-    assert.deepEqual(milestoneNotificationText(tr, account, window, 0.34, 30, 'remaining'), {
-        header: '66% remaining - Claude - Team | Token Grill',
-        title: 'Five-Hour Usage',
-        body: 'Crossed the 70% remaining milestone',
+test('a balance alert reads service, account and amount left', () => {
+    assert.deepEqual(balanceNotificationText(tr, 'DeepSeek', {displayName: 'API', lowBalance: 10}, {amount: 8.4, currency: 'CNY'}), {
+        source: 'DeepSeek · API',
+        title: 'Balance: ¥8.40 left',
+        body: 'Below your ¥10.00 warning',
     });
-    assert.deepEqual(milestoneNotificationText(tr, account, window, 0.34, 30, 'used'), {
-        header: '34% used - Claude - Team | Token Grill',
-        title: 'Five-Hour Usage',
-        body: 'Crossed the 30% used milestone',
-    });
-    assert.equal(milestoneNotificationText(tr, account, {canonicalWindow: 'monthly', label: 'Monthly credits'}, 0.51, 50, 'remaining').title, 'Monthly Usage');
 });
 
-test('test notifications use the selected window and its current reading', () => {
-    assert.equal(testNotificationText(tr, provider('five-hour'), snapshot, 10, 'remaining').title, 'Five-Hour Usage');
-    assert.equal(testNotificationText(tr, provider('automatic'), snapshot, 10, 'remaining').title, 'Weekly Usage');
-    assert.equal(testNotificationText(tr, provider('monthly'), {windows: snapshot.windows.slice(0, 2)}, 10, 'remaining').title, 'Weekly Usage');
-    assert.deepEqual(testNotificationText(tr, provider('five-hour'), snapshot, 10, 'remaining'), {
-        header: '58% remaining - Codex - Personal | Token Grill',
-        title: 'Five-Hour Usage',
-        body: 'Test · crossed the 60% remaining milestone',
-    });
-    assert.equal(testNotificationText(tr, provider('weekly'), snapshot, 25, 'used').body, 'Test · crossed the 50% used milestone');
-    assert.equal(testNotificationText(tr, provider('five-hour'), {windows: [{canonicalWindow: 'five-hour', label: '', percent: 0.02}]}, 10, 'used').body,
-        'Test · crossed the 10% used milestone', 'below the first step the preview shows the first milestone');
+test('each shown limit has its own state key', () => {
+    assert.equal(notificationKey('a', {id: 'five_hour', canonicalWindow: 'five-hour'}), 'a:five-hour');
+    assert.equal(notificationKey('a', {id: 'seven_day_opus', canonicalWindow: 'other'}), 'a:seven_day_opus');
 });
 
-test('test notifications without data use preview values and the preferred window', () => {
-    assert.equal(testNotificationText(tr, provider('monthly', 'kiro'), null, 10, 'remaining').title, 'Monthly Usage');
-    assert.deepEqual(testNotificationText(tr, provider('automatic'), null, 10, 'remaining'), {
-        header: '66% remaining - Codex - Personal | Token Grill',
-        title: 'Five-Hour Usage',
-        body: 'Test · crossed the 70% remaining milestone',
-    });
+test('test notifications use the first shown limit and its current reading', () => {
+    const pinned = testNotificationText(tr, 'Codex', provider({automatic: false, limits: ['five-hour']}), snapshot, 'remaining', NOW);
+    assert.deepEqual(pinned, {source: 'Codex · Personal', title: 'Five-hour: 58% left', body: 'Test notification · Reset time unknown'});
+    assert.equal(testNotificationText(tr, 'Codex', provider(auto), snapshot, 'remaining', NOW).title, 'Weekly: 32% left');
+});
+
+test('test notifications without data preview the first limit of the service', () => {
+    assert.equal(testNotificationText(tr, 'Kiro', provider(auto, 'kiro'), null, 'remaining', NOW).title, 'Monthly: 66% left');
 });
 
 test('test notification requests require only bounded provider and nonce strings', () => {

@@ -149,13 +149,13 @@ test('notifications use per-account sources with symbolic icons and lifecycle cl
         read('src/runtime.ts'),
     ]);
     assert.doesNotMatch(notification, /Main\.notify\(/);
-    assert.match(notification, /new MessageTray\.Source\(\{title: header, icon\}\)/);
-    assert.match(notification, /existing\.title = header;/);
+    assert.match(notification, /new MessageTray\.Source\(\{title, icon\}\)/);
+    assert.match(notification, /existing\.title = title;/);
     assert.match(notification, /new MessageTray\.Notification/);
     assert.match(notification, /providerGicon\(this\._extension\.path, instance\.kind\)/);
     assert.doesNotMatch(notification, /EmblemedIcon|BytesIcon|<svg|accentColor|catch\(\(\) => \{\}\)/);
     assert.match(notification, /notifyTest\(instance:[\s\S]*testNotificationText/);
-    assert.match(notification, /this\._sourceFor\(instance, text\.header\)/);
+    assert.match(notification, /this\._sourceFor\(instance, text\.source\)/);
     assert.doesNotMatch(notification, /— Token Grill/);
     assert.match(notification, /private readonly _sources = new Map<string, MessageTray\.Source>\(\)/);
     assert.match(notification, /source\.connect\('destroy', \(\) => this\._sources\.delete\(instance\.id\)\)/);

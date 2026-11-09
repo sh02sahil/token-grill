@@ -6,12 +6,13 @@ import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 import {selectWindow} from '../core/display.js';
 import {
     clampStep,
-    milestoneNotificationText,
+    limitNotificationText,
     notificationBucket,
     shouldNotifyMilestone,
     testNotificationText,
     type NotificationText,
 } from '../core/notificationPolicy.js';
+import {providerMetadata} from '../core/providerMetadata.js';
 import type {PanelPercentageMode, ProviderInstance, ProviderSnapshot} from '../core/types.js';
 import {readJson, SerialWriter, statePath} from '../storage/atomicJson.js';
 import {providerGicon} from './accountChip.js';
@@ -75,11 +76,11 @@ export class NotificationStore {
             this._persist();
         }
         if (notify)
-            this._show(instance, milestoneNotificationText(TRANSLATOR, instance, window, consumed, bucket * step, mode));
+            this._show(instance, limitNotificationText(TRANSLATOR, providerMetadata(instance.kind).label, instance, window, consumed, mode, Date.now()));
     }
 
-    notifyTest(instance: ProviderInstance, snapshot: ProviderSnapshot | null, stepPercent: number, mode: PanelPercentageMode): void {
-        this._show(instance, testNotificationText(TRANSLATOR, instance, snapshot, stepPercent, mode));
+    notifyTest(instance: ProviderInstance, snapshot: ProviderSnapshot | null, mode: PanelPercentageMode): void {
+        this._show(instance, testNotificationText(TRANSLATOR, providerMetadata(instance.kind).label, instance, snapshot, mode, Date.now()));
     }
 
     removeProvider(providerId: string): void {
@@ -108,15 +109,15 @@ export class NotificationStore {
 
     // The banner shows the source title as its header, so each alert retitles
     // the account's source. Alerts are transient, so no older entry keeps a stale header.
-    private _sourceFor(instance: ProviderInstance, header: string): MessageTray.Source {
+    private _sourceFor(instance: ProviderInstance, title: string): MessageTray.Source {
         const icon = providerGicon(this._extension.path, instance.kind);
         const existing = this._sources.get(instance.id);
         if (existing) {
-            existing.title = header;
+            existing.title = title;
             existing.icon = icon;
             return existing;
         }
-        const source = new MessageTray.Source({title: header, icon});
+        const source = new MessageTray.Source({title, icon});
         source.connect('destroy', () => this._sources.delete(instance.id));
         this._sources.set(instance.id, source);
         Main.messageTray.add(source);
@@ -124,7 +125,7 @@ export class NotificationStore {
     }
 
     private _show(instance: ProviderInstance, text: NotificationText): void {
-        const source = this._sourceFor(instance, text.header);
+        const source = this._sourceFor(instance, text.source);
         source.addNotification(new MessageTray.Notification({source, title: text.title, body: text.body, isTransient: true}));
     }
 }

@@ -1,8 +1,9 @@
-import {selectWindow} from './display.js';
 import {formatText, type Translator} from './i18n.js';
 import {parseRecord, stringAt} from './json.js';
 import {providerMetadata} from './providerMetadata.js';
-import type {CanonicalQuotaWindow, PanelPercentageMode, ProviderInstance, ProviderSnapshot} from './types.js';
+import {durationUntil, formatDuration} from './timeMath.js';
+import {limitKey, orderedLimits, shownLimits} from './topBar.js';
+import type {Balance, PanelPercentageMode, ProviderInstance, ProviderSnapshot, UsageWindow} from './types.js';
 
 export interface NotificationCheckpoint {
     resetIdentity: string;
@@ -10,16 +11,15 @@ export interface NotificationCheckpoint {
     configuredStep: number;
 }
 
-// The header is the account's notification source title; the banner shows it above the title.
+// Read at a glance: the source names service and account, the title the limit and what is left.
 export interface NotificationText {
-    header: string;
+    source: string;
     title: string;
     body: string;
 }
 
 // Shown by the test notification when the account has no usage data yet.
 const PREVIEW_CONSUMED = 0.34;
-const PREVIEW_MILESTONE = 30;
 
 // Milestone steps are multiples of 5 between 5 % and 50 %.
 export function clampStep(stepPercent: number): number {
@@ -31,91 +31,99 @@ export function notificationBucket(percent: number, stepPercent: number): number
     return Math.floor((consumed + 1e-6) / clampStep(stepPercent));
 }
 
-export function windowTitle(tr: Translator, canonical: CanonicalQuotaWindow, label: string): string {
+export function notificationKey(instanceId: string, window: Pick<UsageWindow, 'id' | 'canonicalWindow'>): string {
+    return `${instanceId}:${limitKey(window)}`;
+}
+
+function limitName(tr: Translator, window: Pick<UsageWindow, 'canonicalWindow' | 'label'>): string {
     const {_} = tr;
-    switch (canonical) {
+    switch (window.canonicalWindow) {
     case 'five-hour':
-        return _('Five-Hour Usage');
+        return _('Five-hour');
     case 'weekly':
-        return _('Weekly Usage');
+        return _('Weekly');
     case 'monthly':
-        return _('Monthly Usage');
+        return _('Monthly');
     default:
-        return formatText(_('%s Usage'), label);
+        return window.label;
     }
 }
 
-function displayedPercent(consumed: number, mode: PanelPercentageMode): number {
+function sourceTitle(tr: Translator, serviceLabel: string, accountName: string): string {
+    // Translators: a notification source; the service, then the account name.
+    return formatText(tr._('%s · %s'), serviceLabel, accountName);
+}
+
+function readingTitle(tr: Translator, window: Pick<UsageWindow, 'canonicalWindow' | 'label'>, consumed: number, mode: PanelPercentageMode): string {
+    const {_} = tr;
     const clamped = Math.max(0, Math.min(1, consumed));
-    return Math.round((mode === 'remaining' ? 1 - clamped : clamped) * 100);
+    const name = limitName(tr, window);
+    if (mode === 'remaining')
+        return formatText(_('%s: %d%% left'), name, Math.round((1 - clamped) * 100));
+    return formatText(_('%s: %d%% used'), name, Math.round(clamped * 100));
 }
 
-export function notificationHeader(tr: Translator, accountName: string, consumed: number, mode: PanelPercentageMode): string {
+function resetText(tr: Translator, resetAt: number | null, now: number): string {
     const {_} = tr;
-    const percent = displayedPercent(consumed, mode);
-    if (mode === 'remaining') {
-        // Translators: the header of a usage alert; %d is a percentage, %s the account name.
-        return formatText(_('%d%% remaining - %s | Token Grill'), percent, accountName);
-    }
-    // Translators: the header of a usage alert; %d is a percentage, %s the account name.
-    return formatText(_('%d%% used - %s | Token Grill'), percent, accountName);
+    const parts = durationUntil(resetAt, now);
+    if (!parts)
+        return _('Reset time unknown');
+    if (parts.expired || parts.totalMinutes < 1)
+        return _('Resets now');
+    return formatText(_('Resets in %s'), formatDuration(tr, parts, true));
 }
 
-// Milestones are steps of usage; in remaining mode they are named by what is left.
-function milestoneBody(tr: Translator, milestoneUsed: number, mode: PanelPercentageMode, test: boolean): string {
-    const {_} = tr;
-    if (mode === 'remaining') {
-        const remaining = 100 - milestoneUsed;
-        return test
-            ? formatText(_('Test · crossed the %d%% remaining milestone'), remaining)
-            : formatText(_('Crossed the %d%% remaining milestone'), remaining);
-    }
-    return test
-        ? formatText(_('Test · crossed the %d%% used milestone'), milestoneUsed)
-        : formatText(_('Crossed the %d%% used milestone'), milestoneUsed);
-}
-
-export function milestoneNotificationText(
+export function limitNotificationText(
     tr: Translator,
+    serviceLabel: string,
     instance: Pick<ProviderInstance, 'displayName'>,
-    window: {canonicalWindow: CanonicalQuotaWindow; label: string},
+    window: Pick<UsageWindow, 'canonicalWindow' | 'label' | 'resetAt'>,
     consumed: number,
-    milestoneUsed: number,
-    mode: PanelPercentageMode
+    mode: PanelPercentageMode,
+    now: number
 ): NotificationText {
     return {
-        header: notificationHeader(tr, instance.displayName, consumed, mode),
-        title: windowTitle(tr, window.canonicalWindow, window.label),
-        body: milestoneBody(tr, milestoneUsed, mode, false),
+        source: sourceTitle(tr, serviceLabel, instance.displayName),
+        title: readingTitle(tr, window, consumed, mode),
+        body: resetText(tr, window.resetAt, now),
     };
 }
 
-// The account's preferred window when nothing has been fetched yet.
-function fallbackWindow(instance: Pick<ProviderInstance, 'kind' | 'panelWindowPreference'>): {canonicalWindow: CanonicalQuotaWindow; label: string} {
-    const supported = providerMetadata(instance.kind).quotaWindows;
-    const preferred = instance.panelWindowPreference;
-    const canonicalWindow = preferred !== 'automatic' && supported.includes(preferred) ? preferred : supported[0] ?? 'other';
-    return {canonicalWindow, label: ''};
+function money(amount: number, currency: string): string {
+    return new Intl.NumberFormat(undefined, {style: 'currency', currency, currencyDisplay: 'narrowSymbol'}).format(amount);
 }
 
-// The current reading of the selected window and its last crossed milestone,
-// so the preview looks like the alert the account would send.
+export function balanceNotificationText(
+    tr: Translator,
+    serviceLabel: string,
+    instance: Pick<ProviderInstance, 'displayName' | 'lowBalance'>,
+    balance: Balance
+): NotificationText {
+    const {_} = tr;
+    return {
+        source: sourceTitle(tr, serviceLabel, instance.displayName),
+        title: formatText(_('Balance: %s left'), money(balance.amount, balance.currency)),
+        body: formatText(_('Below your %s warning'), money(instance.lowBalance ?? 0, balance.currency)),
+    };
+}
+
+// The account's first top-bar limit as it reads now, so the preview looks like a real alert.
 export function testNotificationText(
     tr: Translator,
-    instance: Pick<ProviderInstance, 'kind' | 'displayName' | 'panelWindowPreference'>,
+    serviceLabel: string,
+    instance: Pick<ProviderInstance, 'kind' | 'displayName' | 'topBar'>,
     snapshot: Pick<ProviderSnapshot, 'windows'> | null,
-    stepPercent: number,
-    mode: PanelPercentageMode
+    mode: PanelPercentageMode,
+    now: number
 ): NotificationText {
-    const selected = selectWindow(snapshot, instance.panelWindowPreference);
-    const window = selected ?? fallbackWindow(instance);
-    const step = clampStep(stepPercent);
-    const consumed = selected?.percent ?? null;
-    const milestone = consumed === null ? PREVIEW_MILESTONE : Math.max(1, notificationBucket(consumed, step)) * step;
+    const {_} = tr;
+    const window = shownLimits(instance, snapshot)[0] ?? orderedLimits(snapshot)[0] ?? null;
+    const preview = {canonicalWindow: providerMetadata(instance.kind).quotaWindows[0] ?? 'other', label: '', resetAt: null};
+    const consumed = window?.percent ?? PREVIEW_CONSUMED;
     return {
-        header: notificationHeader(tr, instance.displayName, consumed ?? PREVIEW_CONSUMED, mode),
-        title: windowTitle(tr, window.canonicalWindow, window.label),
-        body: milestoneBody(tr, milestone, mode, true),
+        source: sourceTitle(tr, serviceLabel, instance.displayName),
+        title: readingTitle(tr, window ?? preview, consumed, mode),
+        body: formatText(_('Test notification · %s'), resetText(tr, window?.resetAt ?? null, now)),
     };
 }
 

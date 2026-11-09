@@ -237,8 +237,7 @@ export class Runtime implements IndicatorController {
         if (!provider)
             return;
         this._lastTestNonce = request.nonce;
-        const step = this._settings!.get_uint('notification-step-percent');
-        this._notifications!.notifyTest(provider, this._snapshots.get(provider.id) ?? null, step, this._percentageMode());
+        this._notifications!.notifyTest(provider, this._snapshots.get(provider.id) ?? null, this._percentageMode());
     }
 
     private _requestRefresh(providerIds: string[]): void {
