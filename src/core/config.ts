@@ -131,12 +131,15 @@ export function normalizeProvider(value: unknown): ProviderInstance[] {
         return [];
     if (typeof item.id !== 'string' || !isProviderKind(item.kind))
         return [];
-    if (typeof item.accountHome !== 'string' || !isValidPath(item.accountHome))
+    if (typeof item.accountHome !== 'string')
         return [];
 
     const metadata = providerMetadata(item.kind);
     // Local history is read from the service's own app; other apps only lend their sign-in.
     const app = normalizeApp(item.app, metadata.apps);
+    // Only a key pasted into the keyring has no home.
+    if (!isValidPath(item.accountHome) && !(app === 'keyring' && item.accountHome === ''))
+        return [];
     const storedWindow = item.panelWindowPreference as QuotaWindowPreference;
     let panelWindowPreference = QUOTA_WINDOW_PREFERENCES.includes(storedWindow) ? storedWindow : metadata.defaultQuotaWindow;
     if (metadata.quotaWindows.length === 1 && panelWindowPreference !== metadata.quotaWindows[0])

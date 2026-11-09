@@ -10,6 +10,7 @@ const DEFAULT_HOMES: Record<ProviderKind, string[]> = {
     antigravity: ['.gemini', 'antigravity-cli'],
     'copilot': ['.config', 'gh'],
     'opencode-go': [],
+    'deepseek': ['.claude'],
 };
 
 // Antigravity tools have written their OAuth credentials under each of these names.
@@ -22,6 +23,7 @@ const AUTH_FILES: Record<ProviderKind, string> = {
     antigravity: 'acp_token.json',
     'copilot': 'hosts.yml',
     'opencode-go': 'auth.json',
+    'deepseek': 'settings.json',
 };
 
 const HISTORY_DIRECTORIES: Record<ProviderKind, string[]> = {
@@ -31,6 +33,7 @@ const HISTORY_DIRECTORIES: Record<ProviderKind, string[]> = {
     antigravity: [],
     'copilot': [],
     'opencode-go': [],
+    'deepseek': [],
 };
 
 export function expandPath(value: string): string {
@@ -69,6 +72,9 @@ export function openCodeAuthPath(): string {
 export function providerPaths(instance: ProviderInstance): ProviderPaths {
     if (instance.app === 'opencode')
         return {authFile: openCodeAuthPath(), historyDirectories: []};
+    // A pasted key lives in the keyring; there is no file to read.
+    if (instance.app === 'keyring')
+        return {authFile: '', historyDirectories: []};
     const home = expandPath(instance.accountHome);
     const authFile = instance.authFileOverride
         ? expandPath(instance.authFileOverride)

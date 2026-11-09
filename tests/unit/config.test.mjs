@@ -157,3 +157,8 @@ test('new accounts start on automatic', () => {
     assert.equal(provider.app, 'codex-cli');
     assert.equal(provider.lowBalance, null);
 });
+
+test('a keyring account needs no home, other accounts do', () => {
+    assert.equal(normalizeProvider(entry({kind: 'deepseek', app: 'keyring', accountHome: ''})).length, 1);
+    assert.deepEqual(normalizeProvider(entry({kind: 'codex', app: 'codex-cli', accountHome: ''})), []);
+});

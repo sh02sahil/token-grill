@@ -73,6 +73,16 @@ export const PROVIDER_METADATA: Record<ProviderKind, ProviderMetadata> = {
         apps: ['opencode'],
         measure: 'limits',
     },
+    'deepseek': {
+        label: 'DeepSeek',
+        defaultAccent: 'blue',
+        iconFile: 'deepseek-symbolic.svg',
+        quotaWindows: [],
+        defaultQuotaWindow: 'automatic',
+        localHistorySupported: false,
+        apps: ['keyring', 'opencode', 'claude-settings'],
+        measure: 'balance',
+    },
 };
 
 export const PROVIDER_KINDS = Object.keys(PROVIDER_METADATA) as ProviderKind[];

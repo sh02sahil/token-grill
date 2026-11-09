@@ -28,12 +28,13 @@ Gio._promisify(Soup.Session.prototype, 'send_and_read_async', 'send_and_read_fin
 // libsoup applies the session's User-Agent to every request, so this one
 // string names every monitored service: the Antigravity quota API answers 403
 // to clients whose User-Agent does not mention Antigravity.
-export const USER_AGENT = 'TokenGrill (+https://github.com/sh02sahil/token-grill; usage monitor for Codex, Claude, Kiro, Antigravity, Copilot and OpenCode Go)';
+export const USER_AGENT = 'TokenGrill (+https://github.com/sh02sahil/token-grill; usage monitor for Codex, Claude, Kiro, Antigravity, Copilot, OpenCode Go and DeepSeek)';
 
 const MAX_RESPONSE_BYTES = 1024 * 1024;
 const MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 const ALLOWED_HOSTS = new Set([
     'api.anthropic.com',
+    'api.deepseek.com',
     'api.github.com',
     'chatgpt.com',
     'cloudcode-pa.googleapis.com',
@@ -44,7 +45,7 @@ const ALLOWED_HOSTS = new Set([
 const KIRO_OIDC_HOST = /^oidc\.[a-z0-9-]+\.amazonaws\.com$/;
 
 export type RequestJson = (method: string, url: string, headers: Record<string, string>, body?: unknown) => Promise<unknown>;
-export type LimitsUpdate = Partial<Pick<ProviderSnapshot, 'plan' | 'account' | 'windows'>>;
+export type LimitsUpdate = Partial<Pick<ProviderSnapshot, 'plan' | 'account' | 'windows' | 'balance'>>;
 
 export interface CollectorContext {
     aggregates: AggregateStore;

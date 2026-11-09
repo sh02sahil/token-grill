@@ -9,6 +9,7 @@ import {antigravityCredentialStatus} from '../providers/antigravity/auth.js';
 import {loadClaudeAccessToken} from '../providers/claude/auth.js';
 import {loadCodexAccessToken} from '../providers/codex/auth.js';
 import {loadCopilotToken} from '../providers/copilot/auth.js';
+import {loadDeepSeekKey} from '../providers/deepseek/auth.js';
 import {kiroCredentialStatus} from '../providers/kiro/auth.js';
 import {loadOpenCodeGoKey} from '../providers/opencode-go/auth.js';
 
@@ -59,6 +60,7 @@ const CREDENTIAL_CHECKS: Record<ProviderKind, (provider: ProviderInstance, cance
     antigravity: antigravityState,
     'copilot': (provider, cancellable) => authFileState(loadCopilotToken(provider, cancellable)),
     'opencode-go': (_provider, cancellable) => authFileState(loadOpenCodeGoKey(cancellable)),
+    'deepseek': (provider, cancellable) => authFileState(loadDeepSeekKey(provider, cancellable)),
 };
 
 // Rejects only when cancelled or on an unexpected error.

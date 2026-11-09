@@ -9,6 +9,9 @@ import {isCancellation} from '../core/gio.js';
 // D-Bus activation waits about 25 seconds, which would stall every refresh.
 const LOOKUP_TIMEOUT_MS = 3000;
 
+// Token Grill's own items: an API key the user pasted, keyed by account id.
+export const TOKEN_GRILL_KEY_SCHEMA = 'org.gnome.shell.extensions.tokengrill.ApiKey';
+
 export interface KeyringTexts {
     // libsecret is not installed.
     missingLibrary: ErrorText;
