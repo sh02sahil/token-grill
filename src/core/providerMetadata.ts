@@ -83,6 +83,16 @@ export const PROVIDER_METADATA: Record<ProviderKind, ProviderMetadata> = {
         apps: ['keyring', 'opencode', 'claude-settings'],
         measure: 'balance',
     },
+    'kimi': {
+        label: 'Kimi Code',
+        defaultAccent: 'pink',
+        iconFile: 'kimi-symbolic.svg',
+        quotaWindows: ['five-hour', 'weekly', 'monthly'],
+        defaultQuotaWindow: 'automatic',
+        localHistorySupported: false,
+        apps: ['kimi-cli', 'opencode'],
+        measure: 'limits',
+    },
 };
 
 export const PROVIDER_KINDS = Object.keys(PROVIDER_METADATA) as ProviderKind[];

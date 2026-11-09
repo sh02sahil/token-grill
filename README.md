@@ -100,6 +100,7 @@ connects only to these hosts:
 | Copilot     | `api.github.com`                                                                                              | Monthly allowances                      |
 | OpenCode Go | `opencode.ai`                                                                                                 | Usage limits                            |
 | DeepSeek    | `api.deepseek.com`                                                                                            | Prepaid balance                         |
+| Kimi Code   | `api.kimi.com`, or `api.kimi.ai` when Kimi Code is set to that region                                         | Usage limits                            |
 
 Each request obeys these limits:
 

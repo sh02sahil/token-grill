@@ -11,6 +11,7 @@ const DEFAULT_HOMES: Record<ProviderKind, string[]> = {
     'copilot': ['.config', 'gh'],
     'opencode-go': [],
     'deepseek': ['.claude'],
+    'kimi': ['.kimi-code'],
 };
 
 // Antigravity tools have written their OAuth credentials under each of these names.
@@ -24,6 +25,7 @@ const AUTH_FILES: Record<ProviderKind, string> = {
     'copilot': 'hosts.yml',
     'opencode-go': 'auth.json',
     'deepseek': 'settings.json',
+    'kimi': 'credentials/kimi-code.json',
 };
 
 const HISTORY_DIRECTORIES: Record<ProviderKind, string[]> = {
@@ -34,6 +36,7 @@ const HISTORY_DIRECTORIES: Record<ProviderKind, string[]> = {
     'copilot': [],
     'opencode-go': [],
     'deepseek': [],
+    'kimi': [],
 };
 
 export function expandPath(value: string): string {

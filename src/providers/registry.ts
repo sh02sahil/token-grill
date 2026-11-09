@@ -5,6 +5,7 @@ import {ClaudeCollector} from './claude/collector.js';
 import {CodexCollector} from './codex/collector.js';
 import {CopilotCollector} from './copilot/collector.js';
 import {DeepSeekCollector} from './deepseek/collector.js';
+import {KimiCollector} from './kimi/collector.js';
 import {KiroCollector} from './kiro/collector.js';
 import {OpenCodeGoCollector} from './opencode-go/collector.js';
 
@@ -18,5 +19,6 @@ export function createCollectors(): Record<ProviderKind, ProviderCollector> {
         'copilot': new CopilotCollector(),
         'opencode-go': new OpenCodeGoCollector(),
         'deepseek': new DeepSeekCollector(),
+        'kimi': new KimiCollector(),
     };
 }

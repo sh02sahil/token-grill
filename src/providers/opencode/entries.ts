@@ -21,6 +21,7 @@ const OPENCODE_SERVICES: Record<string, {kind: ProviderKind; entry: OpenCodeEntr
     'opencode-go': {kind: 'opencode-go', entry: 'api'},
     'opencode': {kind: 'opencode-go', entry: 'api'},
     'deepseek': {kind: 'deepseek', entry: 'api'},
+    'kimi-for-coding': {kind: 'kimi', entry: 'api'},
 };
 
 // OpenCode's Kiro plugin uses kiro-cli's own sign-in, so the account is added from the Kiro app.

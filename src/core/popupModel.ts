@@ -173,6 +173,7 @@ function withSignInHint(tr: Translator, kind: ProviderKind, app: AccountApp, mes
         'copilot': _('%s Run gh auth login.'),
         'opencode-go': _('%s Run opencode auth login.'),
         'deepseek': _('%s Check the DeepSeek API key in Preferences.'),
+        'kimi': _('%s Start kimi and run /login.'),
     };
     return formatText(templates[kind], message);
 }
