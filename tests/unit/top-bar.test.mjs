@@ -63,8 +63,8 @@ test('a ticked limit the service stopped reporting is skipped', () => {
 
 test('balance accounts are shown by the balance key', () => {
     const balance = {amount: 42.1, currency: 'CNY'};
-    const groups = topBarGroups([account('d', 'deepseek', {automatic: false, limits: ['balance']})], new Map([['d', snapshot([], {balance})]]));
-    assert.deepEqual(groups[0].accounts[0], {id: 'd', accent: 'blue', limits: [], balance, missing: false});
+    const groups = topBarGroups([account('d', 'deepseek', {automatic: false, limits: ['balance']}, {displayName: 'API', lowBalance: 50})], new Map([['d', snapshot([], {balance})]]));
+    assert.deepEqual(groups[0].accounts[0], {id: 'd', name: 'API', accent: 'blue', limits: [], balance, low: true, missing: false});
 });
 
 test('groups keep account order and skip hidden and disabled accounts', () => {

@@ -16,9 +16,11 @@ import type {
     ProviderRuntimeState,
     ProviderSnapshot,
 } from '../core/types.js';
-import {accentDot, createPanelDisplay, providerIcon} from './accountChip.js';
+import {topBarGroups} from '../core/topBar.js';
+import {accentDot, providerIcon} from './accountChip.js';
 import {InfoItem, ProviderDetail, StaticMenuItem, type QuotaWindow} from './providerCard.js';
 import {createToggleGroup, type ToggleItem, type ToggleSegment} from './toggleGroup.js';
+import {createTopBarEntry, entryDescription} from './topBar.js';
 
 export interface IndicatorController {
     refreshAll(): void;
@@ -262,17 +264,20 @@ export class TokenGrillIndicator extends PanelMenu.Button {
     private _renderPanel(state: IndicatorState): void {
         const {panelBox} = this._ui!;
         panelBox.destroy_all_children();
-        const current = activeProvider(state.providers, state.activeProviderId);
-        if (!current) {
+        const groups = topBarGroups(state.providers, state.snapshots);
+        if (!groups.length) {
             panelBox.add_child(new St.Icon({
                 gicon: Gio.icon_new_for_string(`${this._extensionPath}/token-grill-symbolic.svg`),
                 style_class: 'system-status-icon',
             }));
-            panelBox.set_accessible_name(_('Token Grill, no provider accounts configured'));
+            panelBox.set_accessible_name(state.providers.length
+                ? _('Token Grill, no accounts shown in the top bar')
+                : _('Token Grill, no provider accounts configured'));
             return;
         }
-        const snapshot = state.snapshots.get(current.id) ?? null;
-        panelBox.add_child(createPanelDisplay(this._extensionPath, current, snapshot, state.mode, state.style));
+        for (const group of groups)
+            panelBox.add_child(createTopBarEntry(this._extensionPath, group, state.style, state.mode));
+        panelBox.set_accessible_name(groups.map(group => entryDescription(group, state.mode)).join('. '));
     }
 
     private _renderMenu(state: IndicatorState): void {

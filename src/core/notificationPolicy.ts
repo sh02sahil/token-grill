@@ -35,7 +35,7 @@ export function notificationKey(instanceId: string, window: Pick<UsageWindow, 'i
     return `${instanceId}:${limitKey(window)}`;
 }
 
-function limitName(tr: Translator, window: Pick<UsageWindow, 'canonicalWindow' | 'label'>): string {
+export function limitName(tr: Translator, window: Pick<UsageWindow, 'canonicalWindow' | 'label'>): string {
     const {_} = tr;
     switch (window.canonicalWindow) {
     case 'five-hour':

@@ -1,0 +1,181 @@
+// One top-bar entry per service: its icon, then each shown account's limits as
+// nested rings, thin bars or numbers, marked with the account's accent colour.
+import Clutter from 'gi://Clutter';
+import St from 'gi://St';
+import type Cairo from 'cairo';
+
+import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
+import {accentHex} from '../core/accent.js';
+import {displayLabel, displayPercent} from '../core/display.js';
+import {formatText} from '../core/i18n.js';
+import {limitName} from '../core/notificationPolicy.js';
+import {providerMetadata} from '../core/providerMetadata.js';
+import type {TopBarAccount, TopBarGroup} from '../core/topBar.js';
+import type {Balance, PanelDisplayStyle, PanelPercentageMode} from '../core/types.js';
+import {providerIcon} from './accountChip.js';
+import {TRANSLATOR} from './translator.js';
+
+// Ring radius and stroke width per number of nested limits, on a 19 px canvas.
+const RINGS: Record<number, [number, number][]> = {
+    1: [[7, 2.3]],
+    2: [[7.6, 2], [4.3, 2]],
+    3: [[8, 1.7], [5.4, 1.7], [2.9, 1.7]],
+};
+const RING_SIZE = 19;
+const BAR_WIDTH = 5;
+const BAR_HEIGHT = 15;
+const GAP = 2;
+const DOT_SIZE = 5;
+const TRACK_ALPHA = 0.28;
+
+type Rgb = [number, number, number];
+
+function hexRgb(hex: string): Rgb {
+    const value = Number.parseInt(hex.slice(1), 16);
+    return [(value >> 16 & 255) / 255, (value >> 8 & 255) / 255, (value & 255) / 255];
+}
+
+// Meters use the shell accent colour from the stylesheet (`.tokengrill-panel-meter`).
+function meterRgb(area: St.DrawingArea): Rgb {
+    const color = area.get_theme_node().get_foreground_color();
+    return [color.red / 255, color.green / 255, color.blue / 255];
+}
+
+function fillDot(cr: Cairo.Context, rgb: Rgb, x: number, y: number, radius: number): void {
+    cr.setSourceRGBA(...rgb, 1);
+    cr.arc(x, y, radius, 0, Math.PI * 2);
+    cr.fill();
+}
+
+function drawingArea(width: number, height: number, draw: (area: St.DrawingArea, cr: Cairo.Context) => void): St.DrawingArea {
+    const area = new St.DrawingArea({width, height, style_class: 'tokengrill-panel-meter', y_align: Clutter.ActorAlign.CENTER});
+    area.connect('repaint', () => {
+        const cr = area.get_context();
+        draw(area, cr);
+        cr.$dispose();
+    });
+    return area;
+}
+
+// Outer to inner follows the popup's order; the dot sits in the middle while it fits.
+function ringStack(account: TopBarAccount, mode: PanelPercentageMode): St.DrawingArea {
+    const geometry = RINGS[account.limits.length] ?? RINGS[1]!;
+    const dotBelow = account.limits.length > 2;
+    return drawingArea(RING_SIZE, dotBelow ? RING_SIZE + DOT_SIZE + GAP : RING_SIZE, (area, cr) => {
+        const centre = RING_SIZE / 2;
+        account.limits.forEach((window, index) => {
+            const [radius, width] = geometry[index] ?? geometry[0]!;
+            const value = displayPercent(window, mode) ?? 0;
+            cr.setLineWidth(width);
+            cr.setSourceRGBA(...meterRgb(area), TRACK_ALPHA);
+            cr.arc(centre, centre, radius, 0, Math.PI * 2);
+            cr.stroke();
+            cr.setSourceRGBA(...meterRgb(area), 1);
+            cr.arc(centre, centre, radius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * value);
+            cr.stroke();
+        });
+        const accent = hexRgb(accentHex(account.accent));
+        if (dotBelow)
+            fillDot(cr, accent, centre, RING_SIZE + GAP + DOT_SIZE / 2, DOT_SIZE / 2);
+        else
+            fillDot(cr, accent, centre, centre, account.limits.length === 1 ? 2.6 : 1.7);
+    });
+}
+
+function roundedBar(cr: Cairo.Context, x: number, y: number, width: number, height: number): void {
+    const radius = width / 2;
+    cr.newPath();
+    cr.arc(x + radius, y + radius, radius, Math.PI, 0);
+    cr.arc(x + radius, y + height - radius, radius, 0, Math.PI);
+    cr.closePath();
+}
+
+function barStack(account: TopBarAccount, mode: PanelPercentageMode): St.DrawingArea {
+    const count = Math.max(1, account.limits.length);
+    const width = count * BAR_WIDTH + (count - 1) * GAP;
+    return drawingArea(width, BAR_HEIGHT + GAP + DOT_SIZE, (area, cr) => {
+        account.limits.forEach((window, index) => {
+            const x = index * (BAR_WIDTH + GAP);
+            const value = displayPercent(window, mode) ?? 0;
+            roundedBar(cr, x, 0, BAR_WIDTH, BAR_HEIGHT);
+            cr.setSourceRGBA(...meterRgb(area), TRACK_ALPHA);
+            cr.fill();
+            cr.save();
+            cr.rectangle(x, BAR_HEIGHT * (1 - value), BAR_WIDTH, BAR_HEIGHT * value);
+            cr.clip();
+            roundedBar(cr, x, 0, BAR_WIDTH, BAR_HEIGHT);
+            cr.setSourceRGBA(...meterRgb(area), 1);
+            cr.fill();
+            cr.restore();
+        });
+        fillDot(cr, hexRgb(accentHex(account.accent)), width / 2, BAR_HEIGHT + GAP + DOT_SIZE / 2, DOT_SIZE / 2);
+    });
+}
+
+function dot(account: TopBarAccount): St.DrawingArea {
+    return drawingArea(DOT_SIZE + 1, DOT_SIZE + 1, (_area, cr) => fillDot(cr, hexRgb(accentHex(account.accent)), (DOT_SIZE + 1) / 2, (DOT_SIZE + 1) / 2, DOT_SIZE / 2));
+}
+
+function attention(): St.Icon {
+    return new St.Icon({icon_name: 'dialog-warning-symbolic', icon_size: 14, y_align: Clutter.ActorAlign.CENTER});
+}
+
+function money(balance: Balance, wholeUnits: boolean): string {
+    const digits = wholeUnits ? 0 : 2;
+    return new Intl.NumberFormat(undefined, {
+        style: 'currency', currency: balance.currency, currencyDisplay: 'narrowSymbol', minimumFractionDigits: digits, maximumFractionDigits: digits,
+    }).format(balance.amount);
+}
+
+function numbers(account: TopBarAccount, mode: PanelPercentageMode): St.Label {
+    const values = account.limits.map(window => Math.round((displayPercent(window, mode) ?? 0) * 100));
+    // Translators: compact top-bar reading; %s is one or more numbers joined by "·".
+    const text = formatText(_('%s%%'), values.join('·'));
+    return new St.Label({text, style_class: 'tokengrill-panel-value', y_align: Clutter.ActorAlign.CENTER});
+}
+
+function accountReading(account: TopBarAccount, style: PanelDisplayStyle, mode: PanelPercentageMode): St.Widget {
+    const box = new St.BoxLayout({style_class: 'tokengrill-panel-account', y_align: Clutter.ActorAlign.CENTER});
+    if (account.balance) {
+        box.add_child(dot(account));
+        box.add_child(new St.Label({text: money(account.balance, true), style_class: 'tokengrill-panel-value', y_align: Clutter.ActorAlign.CENTER}));
+        if (account.low)
+            box.add_child(attention());
+    } else if (account.missing) {
+        box.add_child(dot(account));
+        box.add_child(attention());
+    } else if (style === 'text') {
+        box.add_child(dot(account));
+        box.add_child(numbers(account, mode));
+    } else {
+        box.add_child(style === 'ring' ? ringStack(account, mode) : barStack(account, mode));
+    }
+    return box;
+}
+
+function accountDescription(account: TopBarAccount, mode: PanelPercentageMode): string {
+    if (account.balance)
+        return formatText(_('%s, %s left'), account.name, money(account.balance, false));
+    if (account.missing)
+        return formatText(_('%s, no reading yet'), account.name);
+    const limits = account.limits.map(window => formatText(_('%s %s'), limitName(TRANSLATOR, window), displayLabel(TRANSLATOR, window, mode)));
+    return [account.name, ...limits].join(', ');
+}
+
+export function entryDescription(group: TopBarGroup, mode: PanelPercentageMode): string {
+    return [providerMetadata(group.kind).label, ...group.accounts.map(account => accountDescription(account, mode))].join('; ');
+}
+
+export function createTopBarEntry(extensionPath: string, group: TopBarGroup, style: PanelDisplayStyle, mode: PanelPercentageMode): St.BoxLayout {
+    const entry = new St.BoxLayout({
+        style_class: 'tokengrill-panel-entry',
+        reactive: true,
+        track_hover: true,
+        y_align: Clutter.ActorAlign.CENTER,
+    });
+    entry.add_child(providerIcon(extensionPath, group.kind, 16));
+    for (const account of group.accounts)
+        entry.add_child(accountReading(account, style, mode));
+    entry.set_accessible_name(entryDescription(group, mode));
+    return entry;
+}

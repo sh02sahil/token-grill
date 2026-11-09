@@ -25,9 +25,12 @@ type WindowsOf = Pick<ProviderSnapshot, 'windows'> | null | undefined;
 
 export interface TopBarAccount {
     id: string;
+    name: string;
     accent: AccentValue;
     limits: UsageWindow[];
     balance: Balance | null;
+    // The balance is below the amount the user asked to be warned at.
+    low: boolean;
     // Nothing to draw: the ticked limits are not in the latest reading.
     missing: boolean;
 }
@@ -94,7 +97,8 @@ export function topBarGroups(providers: ProviderInstance[], snapshots: Map<strin
         const snapshot = snapshots.get(provider.id);
         const limits = shownLimits(provider, snapshot);
         const balance = provider.topBar.limits.includes(BALANCE_KEY) ? snapshot?.balance ?? null : null;
-        group.accounts.push({id: provider.id, accent: provider.accent, limits, balance, missing: !limits.length && !balance});
+        const low = balance !== null && provider.lowBalance !== null && balance.amount < provider.lowBalance;
+        group.accounts.push({id: provider.id, name: provider.displayName, accent: provider.accent, limits, balance, low, missing: !limits.length && !balance});
     }
     return groups;
 }
