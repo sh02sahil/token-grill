@@ -32,7 +32,7 @@ test('the popup is built from native shell menu items and theme styles', async (
     assert.doesNotMatch(indicator, /add_style_class_name\('default'\)/, 'only one level may use a strong selected style');
     assert.doesNotMatch(indicator, /tokengrill-boxpointer|set_clip_to_allocation|Safely|try \{/);
     assert.match(detail, /new BarLevel\.BarLevel\(\{\s*style_class: 'slider tokengrill-meter'/);
-    assert.match(detail, /PopupMenu\.Ornament\.DOT : PopupMenu\.Ornament\.NO_DOT/);
+    assert.match(detail, /PopupMenu\.Ornament\.CHECK : PopupMenu\.Ornament\.NONE/);
     assert.match(detail, /new PopupMenu\.PopupSubMenuMenuItem\(_\('Reset Credits'\)/);
     assert.match(detail, /class ProviderDetail extends PopupMenu\.PopupMenuSection/);
     for (const source of [indicator, detail])
@@ -98,9 +98,10 @@ test('refresh progress uses the native shell spinner and UI uses centralized pac
 });
 
 test('Kiro details are monthly-only and show precise credits', async () => {
-    const [dashboard, model] = await Promise.all([read('src/shell/providerCard.ts'), read('src/core/popupModel.ts')]);
-    assert.match(dashboard, /return _\('Monthly'\)/);
-    assert.match(dashboard, /metadata\.quotaWindows\.includes/);
+    const [dashboard, model, names] = await Promise.all([read('src/shell/providerCard.ts'), read('src/core/popupModel.ts'), read('src/core/notificationPolicy.ts')]);
+    assert.match(names, /return _\('Monthly'\)/);
+    // Before the first reading, rows come from the limits the service is known to have.
+    assert.match(dashboard, /providerMetadata\(instance\.kind\)\.quotaWindows\.map/);
     assert.match(model, /_\('%s of %s credits'\), used, formatQuotaNumber\(window\.limit\)/);
     assert.match(model, /pooled or unlimited/);
 });
@@ -244,7 +245,8 @@ test('UI signals are disconnected and owned actors are released', async () => {
     assert.match(dashboard, /this\._refreshButton\.connect\('clicked', \(\) => onRefresh\(\)\)/);
     assert.match(indicator, /this\._box\.destroy_all_children\(\)/);
     assert.match(indicator, /this\._themeContext!\.disconnect\(this\._themeChangedId!\);\s*this\._themeChangedId = null;\s*this\._themeContext = null;\s*this\._ui = null;\s*super\.destroy\(\)/);
-    assert.doesNotMatch(indicator, /resetShellCursor|open-state-changed|menu\.removeAll/);
+    assert.doesNotMatch(indicator, /resetShellCursor/);
+    assert.match(indicator, /\.disconnect\(this\._openStateId!\);\s*this\._openStateId = null;/);
 });
 
 test('runtime releases all lifecycle-owned references during stop', async () => {

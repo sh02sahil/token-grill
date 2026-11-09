@@ -47,6 +47,15 @@
             <summary>Panel percentage mode</summary>
             <description>Show the remaining or the consumed percentage of the selected limit.</description>
         </key>
+        <key name="popup-account-picker" type="s">
+            <choices>
+                <choice value="buttons"/>
+                <choice value="dropdown"/>
+            </choices>
+            <default>'buttons'</default>
+            <summary>Account picker in the popup</summary>
+            <description>Show a service's accounts in the popup as buttons or as a dropdown list.</description>
+        </key>
         <key name="panel-display-style" type="s">
             <choices>
                 <choice value="text"/>

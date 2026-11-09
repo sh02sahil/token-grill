@@ -9,6 +9,7 @@ import {isCancellation} from './core/gio.js';
 import {parseTestNotificationRequest} from './core/notificationPolicy.js';
 import {Scheduler, type SchedulerJob} from './core/scheduler.js';
 import {snapshotFingerprint} from './core/snapshotFingerprint.js';
+import {isShown, setAutomatic, toggleLimit} from './core/topBar.js';
 import {
     emptySnapshot,
     type PanelDisplayStyle,
@@ -25,7 +26,6 @@ import {requestJson, USER_AGENT, type CollectorContext, type ProviderCollector} 
 import {createCollectors} from './providers/registry.js';
 import {TokenGrillIndicator, type IndicatorController} from './shell/indicator.js';
 import {NotificationStore} from './shell/notifications.js';
-import type {QuotaWindow} from './shell/providerCard.js';
 import {TRANSLATOR} from './shell/translator.js';
 import {AggregateStore} from './storage/aggregateStore.js';
 import {BalanceStore} from './storage/balanceStore.js';
@@ -132,11 +132,27 @@ export class Runtime implements IndicatorController {
         this._settings!.set_string('active-provider-id', providerId);
     }
 
-    selectQuotaWindow(providerId: string, window: QuotaWindow): void {
+    // Opening the menu from a service's top-bar entry selects its first shown account.
+    selectService(kind: ProviderKind): void {
+        const accounts = this._providers.filter(provider => provider.enabled && provider.kind === kind);
+        const target = accounts.find(isShown) ?? accounts[0];
+        if (target)
+            this.selectProvider(target.id);
+    }
+
+    toggleLimit(providerId: string, key: string): void {
+        this._updateTopBar(providerId, provider => toggleLimit(provider, key, this._snapshots.get(provider.id)));
+    }
+
+    setAutomatic(providerId: string, on: boolean): void {
+        this._updateTopBar(providerId, provider => setAutomatic(provider.topBar, on));
+    }
+
+    private _updateTopBar(providerId: string, change: (provider: ProviderInstance) => ProviderInstance['topBar']): void {
         if (!this._providers.some(provider => provider.id === providerId))
             return;
         this._providers = this._providers.map(provider =>
-            provider.id === providerId ? {...provider, panelWindowPreference: window} : provider);
+            provider.id === providerId ? {...provider, topBar: change(provider)} : provider);
         // The settings handler sees the providers already up to date and only re-renders.
         writeProviders(this._settings!, this._providers);
         this._render();
@@ -360,6 +376,7 @@ export class Runtime implements IndicatorController {
             activeProviderId: this._settings!.get_string('active-provider-id'),
             mode: this._percentageMode(),
             style: this._displayStyle(),
+            accountPicker: this._settings!.get_string('popup-account-picker') === 'dropdown' ? 'dropdown' : 'buttons',
             paused: this._paused,
         });
     }

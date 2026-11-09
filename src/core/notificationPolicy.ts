@@ -1,3 +1,4 @@
+import {formatMoney} from './display.js';
 import {formatText, type Translator} from './i18n.js';
 import {parseRecord, stringAt} from './json.js';
 import {providerMetadata} from './providerMetadata.js';
@@ -89,10 +90,6 @@ export function limitNotificationText(
     };
 }
 
-function money(amount: number, currency: string): string {
-    return new Intl.NumberFormat(undefined, {style: 'currency', currency, currencyDisplay: 'narrowSymbol'}).format(amount);
-}
-
 export function balanceNotificationText(
     tr: Translator,
     serviceLabel: string,
@@ -102,8 +99,8 @@ export function balanceNotificationText(
     const {_} = tr;
     return {
         source: sourceTitle(tr, serviceLabel, instance.displayName),
-        title: formatText(_('Balance: %s left'), money(balance.amount, balance.currency)),
-        body: formatText(_('Below your %s warning'), money(instance.lowBalance ?? 0, balance.currency)),
+        title: formatText(_('Balance: %s left'), formatMoney(balance, 2)),
+        body: formatText(_('Below your %s warning'), formatMoney({amount: instance.lowBalance ?? 0, currency: balance.currency}, 2)),
     };
 }
 

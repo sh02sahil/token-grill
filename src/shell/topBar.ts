@@ -6,12 +6,12 @@ import type Cairo from 'cairo';
 
 import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
 import {accentHex} from '../core/accent.js';
-import {displayLabel, displayPercent} from '../core/display.js';
+import {displayLabel, displayPercent, formatMoney} from '../core/display.js';
 import {formatText} from '../core/i18n.js';
 import {limitName} from '../core/notificationPolicy.js';
 import {providerMetadata} from '../core/providerMetadata.js';
 import type {TopBarAccount, TopBarGroup} from '../core/topBar.js';
-import type {Balance, PanelDisplayStyle, PanelPercentageMode} from '../core/types.js';
+import type {PanelDisplayStyle, PanelPercentageMode} from '../core/types.js';
 import {providerIcon} from './accountChip.js';
 import {TRANSLATOR} from './translator.js';
 
@@ -120,13 +120,6 @@ function attention(): St.Icon {
     return new St.Icon({icon_name: 'dialog-warning-symbolic', icon_size: 14, y_align: Clutter.ActorAlign.CENTER});
 }
 
-function money(balance: Balance, wholeUnits: boolean): string {
-    const digits = wholeUnits ? 0 : 2;
-    return new Intl.NumberFormat(undefined, {
-        style: 'currency', currency: balance.currency, currencyDisplay: 'narrowSymbol', minimumFractionDigits: digits, maximumFractionDigits: digits,
-    }).format(balance.amount);
-}
-
 function numbers(account: TopBarAccount, mode: PanelPercentageMode): St.Label {
     const values = account.limits.map(window => Math.round((displayPercent(window, mode) ?? 0) * 100));
     // Translators: compact top-bar reading; %s is one or more numbers joined by "·".
@@ -144,7 +137,7 @@ function accountReading(account: TopBarAccount, style: PanelDisplayStyle, mode: 
             box.add_child(attention());
     } else if (account.balance) {
         box.add_child(dot(account));
-        box.add_child(new St.Label({text: money(account.balance, true), style_class: 'tokengrill-panel-value', y_align: Clutter.ActorAlign.CENTER}));
+        box.add_child(new St.Label({text: formatMoney(account.balance, 0), style_class: 'tokengrill-panel-value', y_align: Clutter.ActorAlign.CENTER}));
         if (account.low)
             box.add_child(attention());
     } else if (account.missing) {
@@ -160,7 +153,7 @@ function drawnReading(account: TopBarAccount, style: PanelDisplayStyle, mode: Pa
 
 function accountDescription(account: TopBarAccount, mode: PanelPercentageMode): string {
     if (account.balance && !account.limits.length)
-        return formatText(_('%s, %s left'), account.name, money(account.balance, false));
+        return formatText(_('%s, %s left'), account.name, formatMoney(account.balance, 2));
     if (account.missing)
         return formatText(_('%s, no reading yet'), account.name);
     const limits = account.limits.map(window => formatText(_('%s %s'), limitName(TRANSLATOR, window), displayLabel(TRANSLATOR, window, mode)));

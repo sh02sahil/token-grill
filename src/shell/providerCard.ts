@@ -10,13 +10,15 @@ import {formatTime} from 'resource:///org/gnome/shell/misc/dateUtils.js';
 import * as Animation from 'resource:///org/gnome/shell/ui/animation.js';
 import * as BarLevel from 'resource:///org/gnome/shell/ui/barLevel.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
-import {displayLabel, displayPercent, pressureClass, selectWindow} from '../core/display.js';
+import {displayLabel, displayPercent, formatMoney, pressureClass} from '../core/display.js';
 import {historyMetrics} from '../core/historyMetrics.js';
+import {formatText} from '../core/i18n.js';
+import {limitName} from '../core/notificationPolicy.js';
 import {errorText, historySummary, refreshStatusText, windowCaption} from '../core/popupModel.js';
 import {providerMetadata} from '../core/providerMetadata.js';
 import {durationUntil, formatDuration} from '../core/timeMath.js';
+import {isShown, limitKey, orderedLimits, shownLimits} from '../core/topBar.js';
 import type {
-    CanonicalQuotaWindow,
     LimitResetCreditSummary,
     PanelPercentageMode,
     ProviderInstance,
@@ -27,21 +29,16 @@ import type {
 import {providerMark} from './accountChip.js';
 import {TRANSLATOR} from './translator.js';
 
-export type QuotaWindow = Exclude<CanonicalQuotaWindow, 'other'>;
-
 export interface ProviderDetailActions {
     refresh: (provider: ProviderInstance) => void;
-    selectWindow: (provider: ProviderInstance, window: QuotaWindow) => void;
+    toggleLimit: (provider: ProviderInstance, key: string) => void;
+    setAutomatic: (provider: ProviderInstance, on: boolean) => void;
 }
 
-const WINDOWS: QuotaWindow[] = ['five-hour', 'weekly', 'monthly'];
-
-function windowName(window: QuotaWindow): string {
-    if (window === 'five-hour')
-        return _('Five-hour');
-    if (window === 'weekly')
-        return _('Weekly');
-    return _('Monthly');
+interface LimitRow {
+    key: string;
+    title: string;
+    window: UsageWindow | null;
 }
 
 function label(text: string, styleClass: string, params: Partial<St.Label.ConstructorProps> = {}): St.Label {
@@ -148,8 +145,8 @@ class IdentityItem extends StaticMenuItem {
     }
 }
 
-// One quota window.  Activating it chooses the window shown in the top bar
-// without closing the menu; the dot ornament marks the current choice.
+// One limit. Activating it adds it to or removes it from the top bar without
+// closing the menu; the check ornament marks the limits shown there.
 class WindowItem extends PopupMenu.PopupBaseMenuItem {
     static {
         GObject.registerClass({GTypeName: 'TokenGrillWindowItem'}, this);
@@ -166,7 +163,7 @@ class WindowItem extends PopupMenu.PopupBaseMenuItem {
         super({style_class: 'tokengrill-window-item'});
         this._title = title;
         this._onSelect = onSelect;
-        this.setOrnament(PopupMenu.Ornament.NO_DOT);
+        this.setOrnament(PopupMenu.Ornament.NONE);
 
         const box = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, x_expand: true, style_class: 'tokengrill-window-box'});
         const head = new St.BoxLayout({x_expand: true});
@@ -196,17 +193,18 @@ class WindowItem extends PopupMenu.PopupBaseMenuItem {
         this._onSelect();
     }
 
-    update(window: UsageWindow | null, mode: PanelPercentageMode, selected: boolean): void {
+    update(window: UsageWindow | null, mode: PanelPercentageMode, shown: boolean, automatic: boolean): void {
         const percent = displayPercent(window, mode);
         const pressure = pressureClass(window);
         const value = window ? displayLabel(TRANSLATOR, window, mode) : _('Unavailable');
         this._value.set_text(value);
         this._meter.value = percent ?? 0;
         this._meter.visible = percent !== null;
-        this._caption.set_text(windowCaption(TRANSLATOR, window));
+        const caption = windowCaption(TRANSLATOR, window);
+        this._caption.set_text(shown && automatic ? formatText(_('%s · chosen automatically'), caption) : caption);
         // Pressure is shown with an icon as well as the number, never colour alone.
         this._warning.visible = pressure !== 'neutral';
-        this.setOrnament(selected ? PopupMenu.Ornament.DOT : PopupMenu.Ornament.NO_DOT);
+        this.setOrnament(shown ? PopupMenu.Ornament.CHECK : PopupMenu.Ornament.NONE);
 
         const parts = [this._title, value];
         if (window?.resetAt)
@@ -215,8 +213,8 @@ class WindowItem extends PopupMenu.PopupBaseMenuItem {
             parts.push(_('almost exhausted'));
         else if (pressure === 'warning')
             parts.push(_('running low'));
-        if (selected)
-            parts.push(_('shown in the top bar'));
+        if (shown)
+            parts.push(automatic ? _('shown in the top bar, chosen automatically') : _('shown in the top bar'));
         this.accessible_name = parts.join(', ');
     }
 }
@@ -260,7 +258,11 @@ export class ProviderDetail extends PopupMenu.PopupMenuSection {
     private _instance: ProviderInstance | null = null;
     private _identity: IdentityItem;
     private _error: InfoItem;
-    private _windows = new Map<QuotaWindow, WindowItem>();
+    private _legend: InfoItem;
+    private _limits: WindowItem[] = [];
+    private _limitKeys = '';
+    private _balance: InfoItem;
+    private _automatic: PopupMenu.PopupSwitchMenuItem;
     private _credits: PopupMenu.PopupSubMenuMenuItem;
     private _creditsNone: InfoItem;
     private _history: InfoItem;
@@ -273,14 +275,14 @@ export class ProviderDetail extends PopupMenu.PopupMenuSection {
         this._actions = actions;
         this._identity = new IdentityItem(() => this._withInstance(instance => this._actions.refresh(instance)));
         this._error = new InfoItem('dialog-warning-symbolic');
-        for (const window of WINDOWS) {
-            const item = new WindowItem(windowName(window), () => this._withInstance(instance => this._actions.selectWindow(instance, window)));
-            this._windows.set(window, item);
-        }
+        this._legend = new InfoItem();
+        this._balance = new InfoItem();
+        this._automatic = new PopupMenu.PopupSwitchMenuItem(_('Pick Automatically'), false);
+        this._automatic.connect('toggled', (_item, state) => this._withInstance(instance => this._actions.setAutomatic(instance, state)));
         this._credits = new PopupMenu.PopupSubMenuMenuItem(_('Reset Credits'), false);
         this._creditsNone = new InfoItem();
         this._history = new InfoItem();
-        this._items = [this._identity, this._error, ...this._windows.values(), this._credits, this._creditsNone, this._history];
+        this._items = [this._identity, this._error, this._legend, this._balance, this._automatic, this._credits, this._creditsNone, this._history];
         for (const item of this._items)
             this.addMenuItem(item);
     }
@@ -288,6 +290,41 @@ export class ProviderDetail extends PopupMenu.PopupMenuSection {
     private _withInstance(callback: (instance: ProviderInstance) => void): void {
         if (this._instance)
             callback(this._instance);
+    }
+
+    // The limits the service reported, or before the first reading the ones it is known to have.
+    private _rows(instance: ProviderInstance, snapshot: ProviderSnapshot | null): LimitRow[] {
+        const windows = orderedLimits(snapshot);
+        if (windows.length)
+            return windows.map(window => ({key: limitKey(window), title: limitName(TRANSLATOR, window), window}));
+        return providerMetadata(instance.kind).quotaWindows.map(canonicalWindow => ({
+            key: canonicalWindow,
+            title: limitName(TRANSLATOR, {canonicalWindow, label: ''}),
+            window: null,
+        }));
+    }
+
+    // Rows are rebuilt only when the set of limits changes, so keyboard focus survives refreshes.
+    private _updateLimits(instance: ProviderInstance, snapshot: ProviderSnapshot | null, mode: PanelPercentageMode): void {
+        const rows = this._rows(instance, snapshot);
+        const keys = JSON.stringify(rows.map(row => [row.key, row.title]));
+        if (keys !== this._limitKeys) {
+            this._limitKeys = keys;
+            for (const item of this._limits)
+                item.destroy();
+            this._limits = rows.map((row, index) => {
+                const item = new WindowItem(row.title, () => this._withInstance(current => this._actions.toggleLimit(current, row.key)));
+                this.addMenuItem(item, this._items.indexOf(this._legend) + 1 + index);
+                return item;
+            });
+        }
+        const shown = new Set(shownLimits(instance, snapshot).map(limitKey));
+        rows.forEach((row, index) => this._limits[index]!.update(row.window, mode, shown.has(row.key), instance.topBar.automatic));
+        this._legend.setText(isShown(instance)
+            ? _('Checked limits are shown in the top bar')
+            : _('Not shown in the top bar. Check a limit to show it.'));
+        this._automatic.visible = rows.length > 0;
+        this._automatic.setToggleState(instance.topBar.automatic);
     }
 
     update(
@@ -298,10 +335,12 @@ export class ProviderDetail extends PopupMenu.PopupMenuSection {
     ): void {
         this._instance = instance;
         if (!instance) {
-            for (const item of this._items)
+            for (const item of [...this._items, ...this._limits])
                 item.visible = false;
             return;
         }
+        for (const item of this._limits)
+            item.visible = true;
         const metadata = providerMetadata(instance.kind);
         this._identity.visible = true;
         this._identity.setMark(providerMark(this._extensionPath, instance, 28));
@@ -311,21 +350,15 @@ export class ProviderDetail extends PopupMenu.PopupMenuSection {
             if (part && !subtitle.some(existing => existing.toLowerCase() === part.toLowerCase()))
                 subtitle.push(part);
         }
+        if (instance.app === 'opencode')
+            subtitle.push(_('via OpenCode'));
         this._identity.setText(instance.displayName, subtitle.join(' · '), refreshStatusText(TRANSLATOR, snapshot, runtime, clockLabel));
         this._identity.setBusy(runtime !== null && runtime.phase !== 'idle');
 
         this._error.setText(errorText(TRANSLATOR, snapshot, instance));
-
-        const preference = instance.panelWindowPreference;
-        const automatic = preference === 'automatic' ? selectWindow(snapshot, preference) : null;
-        for (const [canonical, item] of this._windows) {
-            item.visible = metadata.quotaWindows.includes(canonical);
-            if (!item.visible)
-                continue;
-            const window = snapshot?.windows.find(candidate => candidate.canonicalWindow === canonical) ?? null;
-            const selected = preference === canonical || automatic?.canonicalWindow === canonical;
-            item.update(window, mode, selected);
-        }
+        this._updateLimits(instance, snapshot, mode);
+        const balance = snapshot?.balance ?? null;
+        this._balance.setText(balance ? formatText(_('%s left · prepaid balance'), formatMoney(balance, 2)) : null);
 
         this._updateCredits(snapshot?.resetCredits ?? null);
         this._history.setText(historySummary(TRANSLATOR, historyMetrics(instance, snapshot, runtime)));
