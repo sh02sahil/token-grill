@@ -29,7 +29,7 @@ function prefixedHomes(): ProviderInstance[] {
         if (!match)
             continue;
         const [prefix, kind] = match;
-        const provider = newProvider(kind, `~/${name}`);
+        const provider = newProvider(kind, providerMetadata(kind).apps[0], `~/${name}`);
         if (!hasCredentials(provider) && !providerPaths(provider).historyDirectories.some(pathExists))
             continue;
         provider.displayName = `${providerMetadata(kind).label}${name.slice(prefix.length)}`;
@@ -46,14 +46,14 @@ function antigravityHomes(): ProviderInstance[] {
     const cliMarkers = ['settings.json', 'installation_id'].map(name => GLib.build_filenamev([cliHome, name]));
     const providers = [];
     if (cliMarkers.some(pathExists))
-        providers.push(newProvider('antigravity', cliHome));
+        providers.push(newProvider('antigravity', 'antigravity', cliHome));
     const otherHomes = [
         GLib.build_filenamev([home, '.gemini', 'antigravity']),
         GLib.build_filenamev([home, '.antigravity']),
         GLib.build_filenamev([home, '.config', 'Antigravity']),
     ];
     for (const path of otherHomes) {
-        const provider = newProvider('antigravity', path);
+        const provider = newProvider('antigravity', 'antigravity', path);
         if (hasCredentials(provider))
             providers.push(provider);
     }
@@ -61,7 +61,7 @@ function antigravityHomes(): ProviderInstance[] {
 }
 
 function kiroHomes(): ProviderInstance[] {
-    const provider = newProvider('kiro', defaultHome('kiro'));
+    const provider = newProvider('kiro', 'kiro-cli', defaultHome('kiro'));
     return hasCredentials(provider) ? [provider] : [];
 }
 

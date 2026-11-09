@@ -8,7 +8,7 @@ import {newProvider, QUOTA_WINDOW_PREFERENCES, readProviders} from '../core/conf
 import {formatText} from '../core/i18n.js';
 import {defaultHome, displayPath, expandPath, providerPaths} from '../core/paths.js';
 import {PROVIDER_KINDS, providerMetadata} from '../core/providerMetadata.js';
-import {ACCENTS, type AccentColor, type ProviderInstance, type ProviderKind} from '../core/types.js';
+import {ACCENTS, type AccentColor, type AccentValue, type ProviderInstance, type ProviderKind} from '../core/types.js';
 import {
     firstProviderValidationError,
     type ProviderValidationCode,
@@ -73,7 +73,7 @@ export class ProviderEditorDialog extends Adw.Dialog {
     _onSave: (provider: ProviderInstance) => void;
     _onDelete: (providerId: string) => void;
     _generated: GeneratedDefaults;
-    _accent: AccentColor;
+    _accent: AccentValue;
     _swatches = new Map<AccentColor, Gtk.ToggleButton>();
     _saveButton: Gtk.Button;
     _kind: Adw.ComboRow;
@@ -100,7 +100,7 @@ export class ProviderEditorDialog extends Adw.Dialog {
         });
         this._settings = settings;
         this._isNew = !provider;
-        this._base = provider ?? newProvider('codex', '');
+        this._base = provider ?? newProvider('codex', 'codex-cli', '');
         this._onSave = onSave;
         this._onDelete = onDelete;
         this._generated = generatedDefaults(this._base.kind);
@@ -292,9 +292,11 @@ export class ProviderEditorDialog extends Adw.Dialog {
     }
 
     _draft(): ProviderInstance {
+        const kind = this._selectedKind();
         return {
             ...this._base,
-            kind: this._selectedKind(),
+            kind,
+            app: kind === this._base.kind ? this._base.app : providerMetadata(kind).apps[0],
             displayName: this._name.text.trim(),
             accountHome: this._home.text.trim(),
             authFileOverride: this._auth.text.trim() || null,

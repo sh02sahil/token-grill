@@ -107,7 +107,7 @@ test('Kiro details are monthly-only and show precise credits', async () => {
 
 test('Kiro discovery checks the user-wide data store once and disables history', async () => {
     const [discovery, editor] = await Promise.all([read('src/prefs/discovery.ts'), read('src/prefs/providerEditorDialog.ts')]);
-    assert.match(discovery, /newProvider\('kiro', defaultHome\('kiro'\)\)/);
+    assert.match(discovery, /newProvider\('kiro', 'kiro-cli', defaultHome\('kiro'\)\)/);
     assert.match(editor, /localHistoryEnabled: metadata\.localHistorySupported && this\._history\.active/);
     assert.doesNotMatch(discovery, /\.t3/);
 });

@@ -14,8 +14,9 @@ const [, metadata] = GLib.file_get_contents(`${root}/metadata.json`);
 const dist = `${root}/dist/${JSON.parse(new TextDecoder().decode(metadata)).uuid}`;
 const load = module => import(`file://${dist}/${module}`);
 
-const [{newProvider}, {UNTRANSLATED}, {defaultHome, displayPath, providerPaths}, {emptySnapshot}, base, {createCollectors}, kiroAuth] = await Promise.all([
+const [{newProvider}, {providerMetadata}, {UNTRANSLATED}, {defaultHome, displayPath, providerPaths}, {emptySnapshot}, base, {createCollectors}, kiroAuth] = await Promise.all([
     load('core/config.js'),
+    load('core/providerMetadata.js'),
     load('core/i18n.js'),
     load('core/paths.js'),
     load('core/types.js'),
@@ -29,7 +30,7 @@ if (!(kind in collectors)) {
     console.error('Usage: gjs -m tools/live-smoke.js <codex|claude|kiro|antigravity> [account-home] [auth-file]');
     throw new Error(`Unknown kind: ${kind}`);
 }
-const instance = {...newProvider(kind, home ?? defaultHome(kind)), authFileOverride: authFile ?? null};
+const instance = {...newProvider(kind, providerMetadata(kind).apps[0], home ?? defaultHome(kind)), authFileOverride: authFile ?? null};
 const session = new Soup.Session({timeout: 30, user_agent: base.USER_AGENT});
 const cancellable = new Gio.Cancellable();
 const context = {

@@ -1,4 +1,4 @@
-import type {AccentColor, CanonicalQuotaWindow, ProviderKind, QuotaWindowPreference} from './types.js';
+import type {AccentColor, AccountApp, CanonicalQuotaWindow, ProviderKind, QuotaWindowPreference} from './types.js';
 
 export interface ProviderMetadata {
     label: string;
@@ -7,6 +7,9 @@ export interface ProviderMetadata {
     quotaWindows: CanonicalQuotaWindow[];
     defaultQuotaWindow: QuotaWindowPreference;
     localHistorySupported: boolean;
+    // The apps an account can be read from; the first is the default.
+    apps: readonly [AccountApp, ...AccountApp[]];
+    measure: 'limits' | 'balance';
 }
 
 export const PROVIDER_METADATA: Record<ProviderKind, ProviderMetadata> = {
@@ -17,6 +20,8 @@ export const PROVIDER_METADATA: Record<ProviderKind, ProviderMetadata> = {
         quotaWindows: ['five-hour', 'weekly'],
         defaultQuotaWindow: 'automatic',
         localHistorySupported: true,
+        apps: ['codex-cli'],
+        measure: 'limits',
     },
     claude: {
         label: 'Claude',
@@ -25,6 +30,8 @@ export const PROVIDER_METADATA: Record<ProviderKind, ProviderMetadata> = {
         quotaWindows: ['five-hour', 'weekly'],
         defaultQuotaWindow: 'automatic',
         localHistorySupported: true,
+        apps: ['claude-code'],
+        measure: 'limits',
     },
     kiro: {
         label: 'Kiro',
@@ -33,6 +40,8 @@ export const PROVIDER_METADATA: Record<ProviderKind, ProviderMetadata> = {
         quotaWindows: ['monthly'],
         defaultQuotaWindow: 'monthly',
         localHistorySupported: false,
+        apps: ['kiro-cli'],
+        measure: 'limits',
     },
     antigravity: {
         label: 'Antigravity',
@@ -41,6 +50,8 @@ export const PROVIDER_METADATA: Record<ProviderKind, ProviderMetadata> = {
         quotaWindows: ['five-hour', 'weekly'],
         defaultQuotaWindow: 'automatic',
         localHistorySupported: false,
+        apps: ['antigravity'],
+        measure: 'limits',
     },
 };
 

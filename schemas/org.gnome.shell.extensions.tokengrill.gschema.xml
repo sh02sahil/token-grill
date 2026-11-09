@@ -7,7 +7,7 @@
             <description>Versioned JSON definitions of the Codex, Claude, Kiro, and Antigravity accounts Token Grill monitors.</description>
         </key>
         <key name="configuration-version" type="u">
-            <default>2</default>
+            <default>3</default>
             <summary>Configuration format version</summary>
             <description>Format version of the stored account definitions, used to migrate older configurations.</description>
         </key>
@@ -36,7 +36,7 @@
         <key name="active-provider-id" type="s">
             <default>''</default>
             <summary>Active account</summary>
-            <description>Identifier of the account shown in the top bar.</description>
+            <description>Identifier of the account selected in the popup.</description>
         </key>
         <key name="panel-percentage-mode" type="s">
             <choices>

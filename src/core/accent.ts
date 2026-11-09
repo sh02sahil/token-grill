@@ -1,4 +1,4 @@
-import type {AccentColor} from './types.js';
+import type {AccentColor, AccentValue} from './types.js';
 
 // GNOME's accent palette (libadwaita Adw.AccentColor.to_rgba), so account
 // markers match the colours users already know from Settings → Appearance.
@@ -18,14 +18,28 @@ export const ACCENT_COLORS: Record<AccentColor, string> = {
 // Accent names used before the switch to the GNOME palette.
 const LEGACY_ACCENTS: Record<string, AccentColor> = {cyan: 'teal', amber: 'yellow'};
 
-export function normalizeAccent(value: unknown, fallback: AccentColor): AccentColor {
+const CUSTOM_ACCENT = /^#[0-9a-f]{6}$/i;
+
+function isPaletteName(value: string): value is AccentColor {
+    return Object.hasOwn(ACCENT_COLORS, value);
+}
+
+export function normalizeAccent(value: unknown, fallback: AccentColor): AccentValue {
     if (typeof value !== 'string')
         return fallback;
-    if (value in ACCENT_COLORS)
-        return value as AccentColor;
+    if (isPaletteName(value))
+        return value;
+    if (CUSTOM_ACCENT.test(value))
+        return value.toLowerCase() as AccentValue;
     return LEGACY_ACCENTS[value] || fallback;
 }
 
-export function accentStyleClass(accent: AccentColor): string {
-    return `tokengrill-accent-${normalizeAccent(accent, 'blue')}`;
+export function accentHex(accent: AccentValue): string {
+    return isPaletteName(accent) ? ACCENT_COLORS[accent] : accent;
+}
+
+// Custom colours have no style class; they are drawn from accentHex().
+export function accentStyleClass(accent: AccentValue): string {
+    const normalized = normalizeAccent(accent, 'blue');
+    return `tokengrill-accent-${isPaletteName(normalized) ? normalized : 'custom'}`;
 }

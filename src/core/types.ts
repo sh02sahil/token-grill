@@ -1,5 +1,9 @@
 export type ProviderKind = 'codex' | 'claude' | 'kiro' | 'antigravity';
 export type AccentColor = 'blue' | 'teal' | 'green' | 'yellow' | 'orange' | 'red' | 'pink' | 'purple' | 'slate';
+// A palette name, or a colour the user picked as #rrggbb.
+export type AccentValue = AccentColor | `#${string}`;
+// The app whose sign-in an account reads.
+export type AccountApp = 'codex-cli' | 'claude-code' | 'kiro-cli' | 'antigravity';
 export type QuotaWindowPreference = 'automatic' | 'five-hour' | 'weekly' | 'monthly';
 export type PanelPercentageMode = 'remaining' | 'used';
 export type PanelDisplayStyle = 'text' | 'ring' | 'bar';
@@ -29,12 +33,24 @@ export interface ProviderErrorInfo {
     recovery: 'retry' | 'reauthenticate' | 'edit-provider' | 'none';
 }
 
+// What the top bar shows for an account: the most pressing limit, or the ticked ones.
+export interface TopBarSelection {
+    automatic: boolean;
+    limits: string[];
+}
+
+export interface Balance {
+    amount: number;
+    currency: string;
+}
+
 export interface ProviderInstance {
     schemaVersion: 2;
     id: string;
     kind: ProviderKind;
+    app: AccountApp;
     displayName: string;
-    accent: AccentColor;
+    accent: AccentValue;
     enabled: boolean;
     showInPanel: boolean;
     sortOrder: number;
@@ -44,6 +60,8 @@ export interface ProviderInstance {
     liveUsageEnabled: boolean;
     localHistoryEnabled: boolean;
     panelWindowPreference: QuotaWindowPreference;
+    topBar: TopBarSelection;
+    lowBalance: number | null;
 }
 
 export interface UsageWindow {
@@ -88,6 +106,7 @@ export interface ProviderSnapshot {
     plan: string | null;
     account: string | null;
     windows: UsageWindow[];
+    balance: Balance | null;
     totals: TokenTotals;
     todayTotals: TokenTotals;
     monthTotals: TokenTotals;
@@ -153,6 +172,7 @@ export function emptySnapshot(providerId: string): ProviderSnapshot {
         plan: null,
         account: null,
         windows: [],
+        balance: null,
         totals: {...EMPTY_TOTALS},
         todayTotals: {...EMPTY_TOTALS},
         monthTotals: {...EMPTY_TOTALS},
