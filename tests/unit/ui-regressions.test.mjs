@@ -122,7 +122,7 @@ test('provider HTTP requests are bounded and cannot follow redirects', async () 
     assert.doesNotMatch(source, /'User-Agent'/);
     assert.match(source, /const status = message\.status_code;/, 'GJS throws for status codes missing from Soup.Status, such as 429');
     assert.doesNotMatch(source, /get_status\(\)\s*;/);
-    assert.match(source, /export const USER_AGENT = 'TokenGrill \(\+https:\/\/github\.com\/sh02sahil\/token-grill; [^']*Antigravity\)'/);
+    assert.match(source, /export const USER_AGENT = 'TokenGrill \(\+https:\/\/github\.com\/sh02sahil\/token-grill; [^']*Antigravity[^']*\)'/);
 });
 
 test('persisted state uses private permissions and bounded regular files', async () => {

@@ -53,6 +53,16 @@ export const PROVIDER_METADATA: Record<ProviderKind, ProviderMetadata> = {
         apps: ['antigravity'],
         measure: 'limits',
     },
+    copilot: {
+        label: 'Copilot',
+        defaultAccent: 'slate',
+        iconFile: 'copilot-symbolic.svg',
+        quotaWindows: ['monthly'],
+        defaultQuotaWindow: 'monthly',
+        localHistorySupported: false,
+        apps: ['github-cli', 'copilot-cli', 'opencode'],
+        measure: 'limits',
+    },
 };
 
 export const PROVIDER_KINDS = Object.keys(PROVIDER_METADATA) as ProviderKind[];

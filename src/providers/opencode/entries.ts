@@ -17,6 +17,7 @@ export type OpenCodeMatch =
 const OPENCODE_SERVICES: Record<string, {kind: ProviderKind; entry: OpenCodeEntry['type']}> = {
     openai: {kind: 'codex', entry: 'oauth'},
     anthropic: {kind: 'claude', entry: 'oauth'},
+    'github-copilot': {kind: 'copilot', entry: 'oauth'},
 };
 
 // OpenCode's Kiro plugin uses kiro-cli's own sign-in, so the account is added from the Kiro app.
@@ -59,6 +60,14 @@ export function openCodeAccessToken(entry: OpenCodeEntry | undefined, now: numbe
     if (entry.expires !== null && entry.expires <= now)
         throw new CollectorError('auth-expired', ({_}) => _('The OpenCode sign-in has expired.'));
     return entry.access;
+}
+
+// OpenCode's Copilot sign-in keeps the GitHub token as its refresh token; the
+// access token is a short-lived Copilot session token that the usage API refuses.
+export function openCodeGitHubToken(entry: OpenCodeEntry | undefined): string {
+    if (!entry || entry.type !== 'oauth' || !entry.refresh)
+        throw new CollectorError('auth-missing', ({_}) => _('OpenCode is not signed in to GitHub Copilot.'));
+    return entry.refresh;
 }
 
 export function matchOpenCodeEntry(id: string, entry: OpenCodeEntry): OpenCodeMatch {

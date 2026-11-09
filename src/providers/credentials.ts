@@ -40,7 +40,7 @@ export function credentialFileError(error: unknown, path: string): unknown {
     return new CollectorError('auth-invalid', ({_}) => formatText(_('%s could not be read.'), shown));
 }
 
-export async function readCredentialJson(path: string, cancellable: Gio.Cancellable | null): Promise<Record<string, unknown>> {
+export async function readCredentialText(path: string, cancellable: Gio.Cancellable | null): Promise<string> {
     const file = Gio.File.new_for_path(path);
     const shown = displayPath(path);
     let contents: Uint8Array;
@@ -52,8 +52,12 @@ export async function readCredentialJson(path: string, cancellable: Gio.Cancella
     } catch (error) {
         throw credentialFileError(error, path);
     }
-    const payload = parseRecord(new TextDecoder().decode(contents));
+    return new TextDecoder().decode(contents);
+}
+
+export async function readCredentialJson(path: string, cancellable: Gio.Cancellable | null): Promise<Record<string, unknown>> {
+    const payload = parseRecord(await readCredentialText(path, cancellable));
     if (!payload)
-        throw new CollectorError('auth-invalid', ({_}) => formatText(_('%s does not contain valid credentials.'), shown));
+        throw new CollectorError('auth-invalid', ({_}) => formatText(_('%s does not contain valid credentials.'), displayPath(path)));
     return payload;
 }

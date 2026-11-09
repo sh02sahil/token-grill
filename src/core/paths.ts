@@ -8,6 +8,7 @@ const DEFAULT_HOMES: Record<ProviderKind, string[]> = {
     claude: ['.claude'],
     kiro: [],
     antigravity: ['.gemini', 'antigravity-cli'],
+    copilot: ['.config', 'gh'],
 };
 
 // Antigravity tools have written their OAuth credentials under each of these names.
@@ -18,6 +19,7 @@ const AUTH_FILES: Record<ProviderKind, string> = {
     claude: '.credentials.json',
     kiro: 'data.sqlite3',
     antigravity: 'acp_token.json',
+    copilot: 'hosts.yml',
 };
 
 const HISTORY_DIRECTORIES: Record<ProviderKind, string[]> = {
@@ -25,6 +27,7 @@ const HISTORY_DIRECTORIES: Record<ProviderKind, string[]> = {
     claude: ['projects'],
     kiro: [],
     antigravity: [],
+    copilot: [],
 };
 
 export function expandPath(value: string): string {

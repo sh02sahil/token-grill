@@ -1,8 +1,8 @@
 // Collects one account against the real service with the built extension
 // modules, outside GNOME Shell. Run `npm run build` first.
 //
-//     gjs -m tools/live-smoke.js <codex|claude|kiro|antigravity> [account-home] [auth-file]
-//     gjs -m tools/live-smoke.js <codex|claude> --app opencode
+//     gjs -m tools/live-smoke.js <codex|claude|kiro|antigravity|copilot> [account-home] [auth-file]
+//     gjs -m tools/live-smoke.js <codex|claude|copilot> --app <opencode|github-cli|copilot-cli>
 //
 // Prints the outcome and the usage windows only: no tokens and no e-mail address.
 import GLib from 'gi://GLib';
@@ -30,7 +30,7 @@ const [{newProvider}, {providerMetadata}, {UNTRANSLATED}, {defaultHome, displayP
 
 const collectors = createCollectors();
 if (!(kind in collectors)) {
-    console.error('Usage: gjs -m tools/live-smoke.js <codex|claude|kiro|antigravity> [account-home] [auth-file]');
+    console.error('Usage: gjs -m tools/live-smoke.js <codex|claude|kiro|antigravity|copilot> [account-home] [auth-file]');
     throw new Error(`Unknown kind: ${kind}`);
 }
 const instance = {...newProvider(kind, app ?? providerMetadata(kind).apps[0], home ?? defaultHome(kind)), authFileOverride: authFile ?? null};

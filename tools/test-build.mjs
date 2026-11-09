@@ -58,6 +58,8 @@ const MODULES = [
     ['src/providers/claude/history.ts', 'claude-history.mjs'],
     ['src/providers/claude/normalize.ts', 'claude-normalize.mjs'],
     ['src/providers/codex/history.ts', 'codex-history.mjs'],
+    ['src/providers/copilot/ghHosts.ts', 'copilot-gh-hosts.mjs'],
+    ['src/providers/copilot/normalize.ts', 'copilot-normalize.mjs'],
     ['src/providers/codex/normalize.ts', 'codex-normalize.mjs'],
     ['src/providers/codex/resetCreditsNormalize.ts', 'reset-credits-normalize.mjs'],
     ['src/providers/kiro/authRecords.ts', 'kiro-auth-records.mjs'],

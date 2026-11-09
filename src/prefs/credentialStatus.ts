@@ -8,6 +8,7 @@ import type {ProviderInstance, ProviderKind} from '../core/types.js';
 import {antigravityCredentialStatus} from '../providers/antigravity/auth.js';
 import {loadClaudeAccessToken} from '../providers/claude/auth.js';
 import {loadCodexAccessToken} from '../providers/codex/auth.js';
+import {loadCopilotToken} from '../providers/copilot/auth.js';
 import {kiroCredentialStatus} from '../providers/kiro/auth.js';
 
 export type CredentialState =
@@ -32,6 +33,8 @@ async function authFileState(load: Promise<unknown>): Promise<CredentialState> {
             return 'expired';
         if (error.code === 'auth-invalid' || error.code === 'permission')
             return 'unreadable';
+        if (error.code === 'dependency')
+            return 'libsecret-missing';
         return 'login-required';
     }
 }
@@ -53,6 +56,7 @@ const CREDENTIAL_CHECKS: Record<ProviderKind, (provider: ProviderInstance, cance
     claude: (provider, cancellable) => authFileState(loadClaudeAccessToken(provider, cancellable)),
     kiro: kiroState,
     antigravity: antigravityState,
+    copilot: (provider, cancellable) => authFileState(loadCopilotToken(provider, cancellable)),
 };
 
 // Rejects only when cancelled or on an unexpected error.

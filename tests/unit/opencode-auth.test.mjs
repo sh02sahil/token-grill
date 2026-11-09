@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {matchOpenCodeEntry, openCodeAccessToken, parseOpenCodeAuth} from '../../build/tests/opencode-entries.mjs';
+import {matchOpenCodeEntry, openCodeAccessToken, openCodeGitHubToken, parseOpenCodeAuth} from '../../build/tests/opencode-entries.mjs';
 
 // The field names seen in a real OpenCode auth.json (values replaced).
 const auth = {
@@ -59,4 +59,11 @@ test('an OpenCode API key where a sign-in is needed is auth-invalid', () => {
 
 test('a missing OpenCode sign-in is auth-missing', () => {
     assert.throws(() => openCodeAccessToken(undefined, NOW), {code: 'auth-missing'});
+});
+
+test('a Copilot sign-in in OpenCode belongs to Copilot and reads its GitHub token', () => {
+    const entry = {type: 'oauth', access: 'copilot-session', refresh: 'gho_github', expires: 1, accountId: null};
+    assert.deepEqual(matchOpenCodeEntry('github-copilot', entry), {status: 'service', kind: 'copilot'});
+    assert.equal(openCodeGitHubToken(entry), 'gho_github');
+    assert.throws(() => openCodeGitHubToken({...entry, refresh: null}), {code: 'auth-missing'});
 });
