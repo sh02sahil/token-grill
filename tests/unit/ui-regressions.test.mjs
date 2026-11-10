@@ -347,3 +347,8 @@ test('a low balance is announced, not only shown as an icon', async () => {
     const body = source.match(/function accountDescription\([\s\S]*?\n\}/)[0];
     assert.match(body, /account\.low/);
 });
+
+test('a replaced popup mark is destroyed, not left for the garbage collector', async () => {
+    const source = await read('src/shell/providerCard.ts');
+    assert.match(source, /this\._markBin\.get_child\(\)\?\.destroy\(\);\s*this\._markBin\.set_child\(actor\);/);
+});

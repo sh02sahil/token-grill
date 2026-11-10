@@ -122,6 +122,8 @@ class IdentityItem extends StaticMenuItem {
     }
 
     setMark(actor: Clutter.Actor): void {
+        // set_child() only removes the old mark, and a mark is built on every update.
+        this._markBin.get_child()?.destroy();
         this._markBin.set_child(actor);
     }
 
