@@ -3,17 +3,20 @@ import type Gio from 'gi://Gio';
 import type {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
-import {selectWindow} from '../core/display.js';
 import {
-    clampStep,
+    balanceNotificationText,
+    checkMilestone,
     limitNotificationText,
-    notificationBucket,
-    shouldNotifyMilestone,
+    migrateNotificationState,
+    notificationKey,
+    shouldNotifyLowBalance,
     testNotificationText,
-    type NotificationText,
 } from '../core/notificationPolicy.js';
+import type {NotificationText} from '../core/notificationPolicy.js';
+import {isRecord} from '../core/json.js';
 import {providerMetadata} from '../core/providerMetadata.js';
-import type {PanelPercentageMode, ProviderInstance, ProviderSnapshot} from '../core/types.js';
+import {BALANCE_KEY, isShown, limitKey, shownLimits} from '../core/topBar.js';
+import type {PanelPercentageMode, ProviderInstance, ProviderSnapshot, UsageWindow} from '../core/types.js';
 import {readJson, SerialWriter, statePath} from '../storage/atomicJson.js';
 import {providerGicon} from './accountChip.js';
 import {TRANSLATOR} from './translator.js';
@@ -28,11 +31,14 @@ interface WindowState {
 interface NotificationState {
     schemaVersion: 2;
     windows: Record<string, WindowState>;
+    // Whether each account's balance was below its warning at the last reading.
+    lowBalance: Record<string, boolean>;
 }
 
 function emptyState(): NotificationState {
-    return {schemaVersion: 2, windows: {}};
+    return {schemaVersion: 2, windows: {}, lowBalance: {}};
 }
+
 
 // One message-tray source per account, so each alert carries the account's name and icon.
 export class NotificationStore {
@@ -47,36 +53,22 @@ export class NotificationStore {
 
     async initialize(cancellable: Gio.Cancellable): Promise<void> {
         const loaded = await readJson<Partial<NotificationState> | null>(this._writer.path, null, cancellable, this._extension.getLogger());
-        if (loaded?.schemaVersion === 2 && loaded.windows && typeof loaded.windows === 'object')
-            this._state = {schemaVersion: 2, windows: loaded.windows};
+        if (loaded?.schemaVersion !== 2 || !isRecord(loaded.windows))
+            return;
+        const lowBalance = Object.fromEntries(Object.entries(isRecord(loaded.lowBalance) ? loaded.lowBalance : {})
+            .filter((entry): entry is [string, boolean] => typeof entry[1] === 'boolean'));
+        this._state = {schemaVersion: 2, windows: migrateNotificationState(loaded.windows as Record<string, WindowState>), lowBalance};
     }
 
+    // Only the limits shown in the top bar alert, each with its own milestones.
     notifyMilestones(instance: ProviderInstance, snapshot: ProviderSnapshot, stepPercent: number, mode: PanelPercentageMode): void {
-        if (snapshot.state === 'error' || snapshot.state === 'disabled')
+        if (snapshot.state === 'error' || snapshot.state === 'disabled' || !isShown(instance))
             return;
-        const window = selectWindow(snapshot, instance.panelWindowPreference);
-        if (window?.percent == null)
-            return;
-        const step = clampStep(stepPercent);
-        const consumed = Math.max(0, Math.min(1, window.percent));
-        const bucket = notificationBucket(consumed, step);
-        const resetIdentity = `${window.canonicalWindow}:${window.resetAt ?? 'unknown'}`;
-        const key = `${instance.id}:selected-limit`;
-        const previous = this._state.windows[key] ?? null;
-        const notify = shouldNotifyMilestone(previous, resetIdentity, bucket, step);
-        const carried = previous?.resetIdentity === resetIdentity ? previous.lastNotifiedBucket : 0;
-        const next: WindowState = {
-            providerId: instance.id,
-            resetIdentity,
-            lastNotifiedBucket: Math.max(bucket, carried),
-            configuredStep: step,
-        };
-        if (JSON.stringify(previous) !== JSON.stringify(next)) {
-            this._state.windows[key] = next;
-            this._persist();
-        }
-        if (notify)
-            this._show(instance, limitNotificationText(TRANSLATOR, providerMetadata(instance.kind).label, instance, window, consumed, mode, Date.now()));
+        const limits = shownLimits(instance, snapshot);
+        for (const window of limits)
+            this._notifyLimit(instance, window, stepPercent, mode);
+        if (limits.some(window => limitKey(window) === BALANCE_KEY))
+            this._notifyBalance(instance, snapshot);
     }
 
     notifyTest(instance: ProviderInstance, snapshot: ProviderSnapshot | null, mode: PanelPercentageMode): void {
@@ -87,7 +79,9 @@ export class NotificationStore {
         const keys = Object.keys(this._state.windows).filter(key => this._state.windows[key]?.providerId === providerId);
         for (const key of keys)
             delete this._state.windows[key];
-        if (keys.length)
+        const hadBalance = providerId in this._state.lowBalance;
+        delete this._state.lowBalance[providerId];
+        if (keys.length || hadBalance)
             this._persist();
         this._sources.get(providerId)?.destroy(MessageTray.NotificationDestroyedReason.SOURCE_CLOSED);
     }
@@ -100,6 +94,34 @@ export class NotificationStore {
         for (const source of [...this._sources.values()])
             source.destroy(MessageTray.NotificationDestroyedReason.SOURCE_CLOSED);
         this._sources.clear();
+    }
+
+    private _notifyLimit(instance: ProviderInstance, window: UsageWindow, stepPercent: number, mode: PanelPercentageMode): void {
+        if (window.percent === null)
+            return;
+        const key = notificationKey(instance.id, window);
+        const previous = this._state.windows[key] ?? null;
+        const {notify, consumed, checkpoint} = checkMilestone(previous, {...window, percent: window.percent}, stepPercent);
+        const next: WindowState = {providerId: instance.id, ...checkpoint};
+        if (JSON.stringify(previous) !== JSON.stringify(next)) {
+            this._state.windows[key] = next;
+            this._persist();
+        }
+        if (notify)
+            this._show(instance, limitNotificationText(TRANSLATOR, providerMetadata(instance.kind).label, instance, window, consumed, mode, Date.now()));
+    }
+
+    private _notifyBalance(instance: ProviderInstance, snapshot: ProviderSnapshot): void {
+        if (!snapshot.balance || instance.lowBalance === null)
+            return;
+        const low = snapshot.balance.amount < instance.lowBalance;
+        const previous = this._state.lowBalance[instance.id] ?? null;
+        if (previous !== low) {
+            this._state.lowBalance[instance.id] = low;
+            this._persist();
+        }
+        if (shouldNotifyLowBalance(previous, low))
+            this._show(instance, balanceNotificationText(TRANSLATOR, providerMetadata(instance.kind).label, instance, snapshot.balance));
     }
 
     private _persist(): void {

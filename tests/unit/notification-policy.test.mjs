@@ -5,7 +5,11 @@ import {
     clampStep,
     limitNotificationText,
     notificationBucket,
+    checkMilestone,
+    migrateNotificationState,
+    nextCheckpoint,
     notificationKey,
+    shouldNotifyLowBalance,
     shouldNotifyMilestone,
     parseTestNotificationRequest,
     testNotificationText,
@@ -86,4 +90,51 @@ test('test notification requests require only bounded provider and nonce strings
     assert.deepEqual(parseTestNotificationRequest('{"providerId":"account-1","nonce":"unique"}'), {providerId: 'account-1', nonce: 'unique'});
     for (const malformed of ['', '{}', '[]', '{"providerId":"account-1"}', '{"providerId":4,"nonce":"x"}', 'not json'])
         assert.equal(parseTestNotificationRequest(malformed), null);
+});
+
+test('0.3.x alert state is carried over to the per-limit keys', () => {
+    const migrated = migrateNotificationState({
+        'a:selected-limit': {providerId: 'a', resetIdentity: 'weekly:1794200000000', lastNotifiedBucket: 6, configuredStep: 10},
+        'b:selected-limit': {providerId: 'b', resetIdentity: 'five-hour:unknown', lastNotifiedBucket: 2, configuredStep: 10},
+        'c:monthly': {providerId: 'c', resetIdentity: 'monthly:1', lastNotifiedBucket: 1, configuredStep: 10},
+    });
+    assert.deepEqual(Object.keys(migrated).sort(), ['a:weekly', 'b:five-hour', 'c:monthly']);
+    assert.equal(migrated['a:weekly'].lastNotifiedBucket, 6);
+});
+
+test('a low balance alerts once when it drops below the warning', () => {
+    assert.equal(shouldNotifyLowBalance(null, true), false, 'the first reading only seeds');
+    assert.equal(shouldNotifyLowBalance(false, true), true);
+    assert.equal(shouldNotifyLowBalance(true, true), false);
+    assert.equal(shouldNotifyLowBalance(true, false), false);
+});
+
+test('a limit without a reset time starts over when its reading falls', () => {
+    const previous = {resetIdentity: 'other:unknown', lastNotifiedBucket: 8, configuredStep: 10};
+    assert.equal(nextCheckpoint(previous, 'other:unknown', 2, 10, false).lastNotifiedBucket, 2, 'a top-up re-arms the alerts');
+    assert.equal(nextCheckpoint(previous, 'other:unknown', 9, 10, false).lastNotifiedBucket, 9);
+    const timed = {resetIdentity: 'weekly:1', lastNotifiedBucket: 8, configuredStep: 10};
+    assert.equal(nextCheckpoint(timed, 'weekly:1', 2, 10, true).lastNotifiedBucket, 8, 'a timed limit waits for its reset');
+    assert.equal(nextCheckpoint(timed, 'weekly:2', 2, 10, true).lastNotifiedBucket, 2);
+});
+
+test('each limit keeps its own milestones under a key that 0.3.x state migrates to', () => {
+    const window = {id: 'seven_day', canonicalWindow: 'weekly', resetAt: 1794200000000, percent: 0.62};
+    const seeded = checkMilestone(null, window, 10);
+    assert.equal(seeded.notify, false);
+    assert.deepEqual(seeded.checkpoint, {resetIdentity: 'weekly:1794199980000', lastNotifiedBucket: 6, configuredStep: 10});
+    const crossed = checkMilestone(seeded.checkpoint, {...window, percent: 0.71}, 10);
+    assert.equal(crossed.notify, true);
+    assert.equal(crossed.consumed, 0.71);
+    const legacy = {providerId: 'a', resetIdentity: 'weekly:1794200000000', lastNotifiedBucket: 6, configuredStep: 10};
+    const migrated = migrateNotificationState({'a:selected-limit': legacy});
+    assert.equal(notificationKey('a', window), 'a:weekly');
+    assert.equal(checkMilestone(migrated['a:weekly'], window, 10).notify, false, 'the upgrade does not re-alert');
+});
+
+test('a reset time that drifts by milliseconds is the same reset', () => {
+    const window = {id: 'five_hour', canonicalWindow: 'five-hour', resetAt: 1794271200177, percent: 0.82};
+    const seeded = checkMilestone(null, window, 10);
+    const next = checkMilestone(seeded.checkpoint, {...window, resetAt: 1794271199875, percent: 0.91}, 10);
+    assert.equal(next.notify, true);
 });

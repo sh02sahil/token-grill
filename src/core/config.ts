@@ -2,7 +2,6 @@ import type Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
 import {normalizeAccent} from './accent.js';
-import {activeProvider} from './display.js';
 import {expandPath} from './paths.js';
 import {PROVIDER_METADATA, providerMetadata} from './providerMetadata.js';
 import {orderedProviders} from './providerOrder.js';
@@ -46,6 +45,13 @@ function legacyTopBar(item: ProviderInstance, activeId: string | null): TopBarSe
     return {automatic: false, limits: [item.panelWindowPreference]};
 }
 
+// The account 0.3.x showed in the top bar, chosen the way 0.3.x chose it.
+function legacyActiveId(providers: ProviderInstance[], activeId: string): string | null {
+    const enabled = providers.filter(provider => provider.enabled);
+    return (enabled.find(provider => provider.id === activeId) ??
+        enabled.find(provider => provider.showInPanel) ?? enabled[0])?.id ?? null;
+}
+
 // A malformed legacy value is left untouched so it can still be recovered by hand;
 // migrating it would silently drop the entries that fail to normalize.
 export function migrateProviderSettings(settings: Gio.Settings): void {
@@ -58,7 +64,7 @@ export function migrateProviderSettings(settings: Gio.Settings): void {
     if (providers.length !== stored.length)
         return;
     if (version < CONFIGURATION_VERSION) {
-        const activeId = activeProvider(providers, settings.get_string('active-provider-id'))?.id ?? null;
+        const activeId = legacyActiveId(providers, settings.get_string('active-provider-id'));
         providers = providers.map((provider, index) => hasTopBar(stored[index])
             ? provider
             : {...provider, topBar: legacyTopBar(provider, activeId)});

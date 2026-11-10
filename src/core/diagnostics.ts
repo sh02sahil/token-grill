@@ -23,6 +23,8 @@ const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 const UUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
 // Secrets mix letters and digits; field names such as cloud_session_storage_enabled do not.
 const TOKEN = /[A-Za-z0-9_\-.]{24,}/g;
+// Requests go only to fixed service hosts, such as codewhisperer.us-east-1.amazonaws.com.
+const HOST = /^(?:[a-z0-9-]+\.)+[a-z]{2,}$/;
 
 // The types of a parsed response, never its values.
 export function shapeOf(value: unknown, depth = SHAPE_DEPTH): string {
@@ -41,12 +43,17 @@ export function shapeOf(value: unknown, depth = SHAPE_DEPTH): string {
     return `{${shown.join(', ')}}`;
 }
 
+// Query strings can carry keys, so only the host and path are kept.
+export function requestDetail(method: string, url: string): string {
+    return `${method} ${url.replace(/^https?:\/\//, '').replace(/[?#].*$/, '')}`;
+}
+
 export function redact(text: string, home: string): string {
     return text
         .replaceAll(home, '~')
         .replace(EMAIL, '<email>')
         .replace(UUID, '<id>')
-        .replace(TOKEN, match => /\d/.test(match) && /[A-Za-z]/.test(match) ? '<token>' : match);
+        .replace(TOKEN, match => /\d/.test(match) && /[A-Za-z]/.test(match) && !HOST.test(match) ? '<token>' : match);
 }
 
 // Accounts are numbered per service, so a report never carries the names users gave them.

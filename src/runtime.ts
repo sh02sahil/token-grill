@@ -1,10 +1,13 @@
 import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
 import Soup from 'gi://Soup';
 
 import type {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {migrateProviderSettings, readProviders, writeProviders} from './core/config.js';
+import {accountLabel, requestDetail, shapeOf, type DiagnosticEntry} from './core/diagnostics.js';
 import {activeProvider} from './core/display.js';
+import {CollectorError} from './core/errors.js';
 import {isCancellation} from './core/gio.js';
 import {parseTestNotificationRequest} from './core/notificationPolicy.js';
 import {Scheduler, type SchedulerJob} from './core/scheduler.js';
@@ -30,6 +33,7 @@ import {TRANSLATOR} from './shell/translator.js';
 import {AggregateStore} from './storage/aggregateStore.js';
 import {BalanceStore} from './storage/balanceStore.js';
 import {CheckpointStore} from './storage/checkpointStore.js';
+import {DiagnosticsStore} from './storage/diagnosticsStore.js';
 
 const SOURCE_PHASES: Record<RefreshSource, RefreshPhase> = {
     'limits': 'fetching-limits',
@@ -51,6 +55,7 @@ export class Runtime implements IndicatorController {
     private _checkpoints: CheckpointStore | null;
     private _balances: BalanceStore | null;
     private _notifications: NotificationStore | null;
+    private _diagnostics: DiagnosticsStore | null;
     private _collectors: Record<ProviderKind, ProviderCollector> | null = createCollectors();
     private _scheduler: Scheduler | null;
     private _indicator: TokenGrillIndicator | null = null;
@@ -69,6 +74,7 @@ export class Runtime implements IndicatorController {
         this._checkpoints = new CheckpointStore(extension.getLogger());
         this._balances = new BalanceStore(extension.getLogger());
         this._notifications = new NotificationStore(extension);
+        this._diagnostics = new DiagnosticsStore(extension.getLogger(), GLib.get_home_dir());
         this._scheduler = new Scheduler(
             jobs => this._collect(jobs).catch(error => this._extension.getLogger().error(error)),
             this._settings.get_uint('refresh-interval-seconds'));
@@ -102,13 +108,14 @@ export class Runtime implements IndicatorController {
 
         // Final writes touch only our own state files, never Shell objects, so they may finish after disable().
         const logger = this._extension.getLogger();
-        Promise.all([this._aggregates!.flush(), this._checkpoints!.flush(), this._balances!.flush(), this._notifications!.flush()])
+        Promise.all([this._aggregates!.flush(), this._checkpoints!.flush(), this._balances!.flush(), this._notifications!.flush(), this._diagnostics!.flush()])
             .catch(error => logger.warn(error));
         this._notifications!.destroy();
         this._notifications = null;
         this._aggregates = null;
         this._checkpoints = null;
         this._balances = null;
+        this._diagnostics = null;
         this._settings = null;
 
         this._snapshots.clear();
@@ -178,6 +185,7 @@ export class Runtime implements IndicatorController {
             this._checkpoints!.initialize(cancellable),
             this._balances!.initialize(cancellable),
             this._notifications!.initialize(cancellable),
+            this._diagnostics!.initialize(cancellable),
         ]);
         if (cancellable.is_cancelled())
             return;
@@ -286,6 +294,7 @@ export class Runtime implements IndicatorController {
             this._render();
         }
         this._scheduler!.complete();
+        this._diagnostics!.flush().catch(error => this._extension.getLogger().warn(error));
     }
 
     private async _refreshProvider(provider: ProviderInstance, manual: boolean, cancellable: Gio.Cancellable): Promise<void> {
@@ -302,7 +311,8 @@ export class Runtime implements IndicatorController {
             cancellable,
             tr: TRANSLATOR,
             manual,
-            requestJson: (method, url, headers, body) => requestJson(session, method, url, headers, body, cancellable),
+            requestJson: (method, url, headers, body) => this._recordedRequest(provider, method, url, cancellable,
+                () => requestJson(session, method, url, headers, body, cancellable)),
             onSourcePhase: source => {
                 if (cancellable.is_cancelled())
                     return;
@@ -344,6 +354,36 @@ export class Runtime implements IndicatorController {
             this._finish(provider.id, 'unchanged');
         else
             this._finish(provider.id, 'changed');
+    }
+
+    // Each step goes to the diagnostics file. Testers who turn on the journal mirror see it
+    // live; it logs at message level because the journal drops debug messages by default.
+    private _record(provider: ProviderInstance, step: DiagnosticEntry['step'], detail: string): void {
+        const index = this._providers.filter(item => item.kind === provider.kind).findIndex(item => item.id === provider.id);
+        const entry = this._diagnostics!.record({at: Date.now(), account: accountLabel(provider.kind, index + 1), kind: provider.kind, app: provider.app, step, detail});
+        if (this._settings!.get_boolean('diagnostics-journal'))
+            this._extension.getLogger().log(`${entry.account} (${entry.app}) ${entry.step}: ${entry.detail}`);
+    }
+
+    // Nothing is recorded once disable() has cancelled the refresh.
+    private async _recordedRequest(
+        provider: ProviderInstance,
+        method: string,
+        url: string,
+        cancellable: Gio.Cancellable,
+        request: () => Promise<unknown>
+    ): Promise<unknown> {
+        this._record(provider, 'request', requestDetail(method, url));
+        try {
+            const body = await request();
+            if (!cancellable.is_cancelled())
+                this._record(provider, 'response', shapeOf(body));
+            return body;
+        } catch (error) {
+            if (error instanceof CollectorError && !cancellable.is_cancelled())
+                this._record(provider, 'error', error.status === null ? error.code : `${error.code} (HTTP ${error.status})`);
+            throw error;
+        }
     }
 
     private _finish(providerId: string, outcome: ProviderRuntimeState['outcome']): void {

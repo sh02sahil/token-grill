@@ -18,8 +18,7 @@ const WINDOW_PATTERNS: Record<Exclude<CanonicalQuotaWindow, 'other'>, RegExp> = 
 
 export function activeProvider(providers: ProviderInstance[], activeId: string): ProviderInstance | null {
     const enabled = providers.filter(provider => provider.enabled);
-    return enabled.find(provider => provider.id === activeId) ||
-        enabled.find(provider => provider.showInPanel) || enabled[0] || null;
+    return enabled.find(provider => provider.id === activeId) ?? enabled[0] ?? null;
 }
 
 function highestWindow(windows: UsageWindow[]): UsageWindow | null {

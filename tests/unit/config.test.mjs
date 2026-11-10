@@ -104,6 +104,13 @@ test('migration without a stored active account uses the first enabled account',
     assert.deepEqual(readProviders(settings)[0].topBar, {automatic: false, limits: ['five-hour']});
 });
 
+test('migration without a stored active account follows the account 0.3.x showed', () => {
+    const accounts = realConfiguration().map(item => ({...item, showInPanel: item.id === 'a4'}));
+    const settings = fakeSettings(accounts, 2, '');
+    migrateProviderSettings(settings);
+    assert.deepEqual(readProviders(settings).find(provider => provider.id === 'a4').topBar, {automatic: false, limits: ['monthly']});
+});
+
 test('migration gives existing accounts their native app', () => {
     const settings = fakeSettings(realConfiguration(), 2, 'a1');
     migrateProviderSettings(settings);

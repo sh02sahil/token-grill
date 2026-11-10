@@ -34,6 +34,7 @@ test('pressure thresholds and active account fallback', () => {
     assert.equal(pressureClass({percent: 0.5}), 'neutral');
     assert.equal(pressureClass({percent: 0.8}), 'warning');
     assert.equal(pressureClass({percent: 0.95}), 'critical');
-    const providers = [{id: 'a', enabled: false}, {id: 'b', enabled: true, showInPanel: true}];
+    const providers = [{id: 'a', enabled: false}, {id: 'b', enabled: true}, {id: 'c', enabled: true}];
     assert.equal(activeProvider(providers, 'a').id, 'b');
+    assert.equal(activeProvider(providers, 'c').id, 'c');
 });

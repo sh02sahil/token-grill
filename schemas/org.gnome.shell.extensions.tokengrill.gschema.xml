@@ -56,6 +56,11 @@
             <summary>Account picker in the popup</summary>
             <description>Show a service's accounts in the popup as buttons or as a dropdown list.</description>
         </key>
+        <key name="diagnostics-journal" type="b">
+            <default>false</default>
+            <summary>Copy diagnostics to the system journal</summary>
+            <description>For testers: also write each redacted refresh step to the journal as a debug message.</description>
+        </key>
         <key name="panel-display-style" type="s">
             <choices>
                 <choice value="text"/>
