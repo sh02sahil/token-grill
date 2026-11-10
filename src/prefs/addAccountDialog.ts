@@ -9,10 +9,9 @@ import {newProvider} from '../core/config.js';
 import {CollectorError} from '../core/errors.js';
 import {isCancellation} from '../core/gio.js';
 import {formatText} from '../core/i18n.js';
-import {displayPath} from '../core/paths.js';
-import {providerMetadata} from '../core/providerMetadata.js';
 import type {AccountApp, ProviderInstance, ProviderKind} from '../core/types.js';
 import type {Candidate} from '../providers/candidates.js';
+import {CandidateList} from './candidateList.js';
 import {storeApiKey} from './keyStore.js';
 import {findCandidates} from './sources.js';
 import {TRANSLATOR} from './translator.js';
@@ -33,22 +32,6 @@ function emptyHint(app: AccountApp): string {
     if (command)
         return formatText(_('Sign in with %s, then try again.'), command);
     return _('Sign in with the app, then try again.');
-}
-
-function candidateProvider(candidate: Candidate & {kind: ProviderKind}): ProviderInstance {
-    const provider = newProvider(candidate.kind, candidate.app, candidate.accountHome);
-    provider.displayName = candidate.label;
-    return provider;
-}
-
-function isAddable(candidate: Candidate): candidate is Candidate & {kind: ProviderKind} {
-    return candidate.status === 'ready' && candidate.kind !== null;
-}
-
-interface CandidateRow {
-    candidate: Candidate & {kind: ProviderKind};
-    row: Adw.ActionRow;
-    check: Gtk.CheckButton;
 }
 
 // Starts from the app the user signs in with; every account lands in its own service.
@@ -141,72 +124,18 @@ export class AddAccountDialog extends Adw.Dialog {
         return navigation;
     }
 
+    // Shows the found sign-ins and wires the header's Add button to them.
     private _candidateGroup(candidates: Candidate[], add: Gtk.Button, description: string): Adw.PreferencesGroup {
-        const group = new Adw.PreferencesGroup({description});
-        const rows: CandidateRow[] = [];
-        const update = () => {
-            add.sensitive = rows.some(row => row.check.active);
-        };
-        for (const candidate of candidates) {
-            if (isAddable(candidate)) {
-                const row = this._candidateRow(candidate);
-                row.check.connect('toggled', update);
-                rows.push(row);
-                group.add(row.row);
-            } else {
-                group.add(this._inactiveRow(candidate));
-            }
-        }
-        update();
-        add.visible = rows.length > 0;
+        const list = new CandidateList(candidates, this._configured, this._extensionPath, description);
+        add.visible = list.addable > 0;
+        list.connectChanged(anySelected => {
+            add.sensitive = anySelected;
+        });
         add.connect('clicked', () => {
-            this._onAdd(rows.filter(row => row.check.active).map(row => candidateProvider(row.candidate)));
+            this._onAdd(list.selected());
             this.close();
         });
-        return group;
-    }
-
-    private _where(candidate: Candidate & {kind: ProviderKind}): string {
-        if (candidate.app === 'opencode')
-            return _('via OpenCode');
-        // Translators: a service name, then where the sign-in was found.
-        return formatText(_('%s · %s'), providerMetadata(candidate.kind).label, displayPath(candidate.accountHome));
-    }
-
-    private _candidateRow(candidate: Candidate & {kind: ProviderKind}): CandidateRow {
-        const duplicate = candidate.duplicateOf ? this._configured.find(item => item.id === candidate.duplicateOf) ?? null : null;
-        const check = new Gtk.CheckButton({active: !duplicate, valign: Gtk.Align.CENTER});
-        const row = new Adw.ActionRow({title: candidate.label, subtitle: this._where(candidate), activatable_widget: check});
-        // add_prefix() places each widget first, so the check box ends up before the icon.
-        row.add_prefix(providerIcon(this._extensionPath, candidate.kind));
-        row.add_prefix(check);
-        if (duplicate) {
-            const name = formatText(_('%s · %s'), providerMetadata(duplicate.kind).label, duplicate.displayName);
-            row.subtitle = formatText(_('Looks like %s, which you already added'), name);
-            row.add_suffix(new Gtk.Image({icon_name: 'dialog-warning-symbolic', css_classes: ['warning']}));
-            const choice = new Gtk.Button({label: _('Add Anyway'), valign: Gtk.Align.CENTER});
-            choice.connect('clicked', () => {
-                check.active = !check.active;
-            });
-            check.connect('toggled', () => {
-                choice.label = check.active ? _('Skip') : _('Add Anyway');
-            });
-            row.add_suffix(choice);
-        }
-        return {candidate, row, check};
-    }
-
-    private _inactiveRow(candidate: Candidate): Adw.ActionRow {
-        let subtitle = _('API key · nothing to track');
-        if (candidate.status === 'already-added')
-            subtitle = _('Already added');
-        else if (candidate.status === 'uses-other-app')
-            // Translators: %s is a service name, such as Kiro.
-            subtitle = formatText(_('Uses the %s app’s own sign-in; add it from there'), candidate.label);
-        const row = new Adw.ActionRow({title: candidate.label, subtitle, sensitive: false});
-        if (candidate.kind)
-            row.add_prefix(providerIcon(this._extensionPath, candidate.kind));
-        return row;
+        return list.group;
     }
 
     private _deepSeekPage(): Adw.NavigationPage {

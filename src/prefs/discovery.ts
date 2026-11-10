@@ -2,14 +2,9 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
 import {newProvider} from '../core/config.js';
-import {authFileCandidates, defaultHome, expandPath, pathExists, providerPaths} from '../core/paths.js';
+import {authFileCandidates, defaultHome, pathExists, providerPaths} from '../core/paths.js';
 import {providerMetadata} from '../core/providerMetadata.js';
 import type {ProviderInstance} from '../core/types.js';
-
-export interface Discovery {
-    found: ProviderInstance[];
-    candidates: number;
-}
 
 function hasCredentials(provider: ProviderInstance): boolean {
     return authFileCandidates(provider).some(pathExists);
@@ -76,19 +71,4 @@ export function kimiHomes(): ProviderInstance[] {
 export function githubCliHomes(): ProviderInstance[] {
     const provider = newProvider('copilot', 'github-cli', defaultHome('copilot'));
     return hasCredentials(provider) ? [provider] : [];
-}
-
-export function discoverAccounts(configured: ProviderInstance[]): Discovery {
-    // A pasted key has no home to compare.
-    const known = new Set(configured.filter(provider => provider.accountHome).map(provider => expandPath(provider.accountHome)));
-    const candidates = [...cliHomes('codex'), ...cliHomes('claude'), ...kiroHomes(), ...antigravityHomes()];
-    const found = [];
-    for (const candidate of candidates) {
-        const home = expandPath(candidate.accountHome);
-        if (known.has(home))
-            continue;
-        known.add(home);
-        found.push(candidate);
-    }
-    return {found, candidates: candidates.length};
 }

@@ -1,57 +1,68 @@
 import Adw from 'gi://Adw';
+import Gio from 'gi://Gio';
 import GObject from 'gi://GObject';
 import Gtk from 'gi://Gtk';
 
-import {gettext as _} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
+import {gettext as _, ngettext} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
+import {isCancellation} from '../core/gio.js';
 import {formatText} from '../core/i18n.js';
-import {displayPath} from '../core/paths.js';
-import {providerMetadata} from '../core/providerMetadata.js';
 import type {ProviderInstance} from '../core/types.js';
-import {providerIcon} from './widgets.js';
+import {CandidateList} from './candidateList.js';
+import {findAllCandidates} from './sources.js';
 
+// Every supported app at once, ending with "Show in top bar?": ticked accounts
+// are added and shown, unticked ones are not added at all.
 export class DiscoverDialog extends Adw.Dialog {
     static {
         GObject.registerClass({GTypeName: 'TokenGrillDiscoverDialog'}, this);
     }
 
-    constructor(found: ProviderInstance[], extensionPath: string, onAdd: (providers: ProviderInstance[]) => void) {
-        super({title: _('Discover Accounts'), content_width: 520, content_height: 520});
+    private readonly _cancellable = new Gio.Cancellable();
+
+    constructor(configured: ProviderInstance[], extensionPath: string, onAdd: (providers: ProviderInstance[]) => void) {
+        super({title: _('Discover Accounts'), content_width: 520, content_height: 600});
+        this.connect('closed', () => this._cancellable.cancel());
 
         const header = new Adw.HeaderBar({show_start_title_buttons: false, show_end_title_buttons: false});
         const cancel = new Gtk.Button({label: _('Cancel')});
         cancel.connect('clicked', () => this.close());
         header.pack_start(cancel);
-        const add = new Gtk.Button({label: _('Add'), css_classes: ['suggested-action']});
-        header.pack_end(add);
+        const done = new Gtk.Button({label: _('Done'), css_classes: ['suggested-action'], visible: false});
+        header.pack_end(done);
 
-        const group = new Adw.PreferencesGroup({description: _('Select the accounts Token Grill should monitor')});
-        const checks = found.map(provider => {
-            const check = new Gtk.CheckButton({active: true, valign: Gtk.Align.CENTER});
-            const row = new Adw.ActionRow({
-                title: provider.displayName,
-                // Translators: a service name, then the account's home directory.
-                subtitle: formatText(_('%s · %s'), providerMetadata(provider.kind).label, displayPath(provider.accountHome)),
-                activatable_widget: check,
-            });
-            row.add_prefix(check);
-            row.add_suffix(providerIcon(extensionPath, provider.kind));
-            group.add(row);
-            return check;
-        });
-        for (const check of checks) {
-            check.connect('toggled', () => {
-                add.sensitive = checks.some(item => item.active);
-            });
-        }
-        add.connect('clicked', () => {
-            onAdd(found.filter((_provider, index) => checks[index]?.active));
-            this.close();
-        });
-
-        const page = new Adw.PreferencesPage();
-        page.add(group);
-        const toolbar = new Adw.ToolbarView({content: page});
+        const stack = new Gtk.Stack();
+        stack.add_named(new Adw.Spinner(), 'searching');
+        const toolbar = new Adw.ToolbarView({content: stack});
         toolbar.add_top_bar(header);
         this.set_child(toolbar);
+
+        findAllCandidates(configured, this._cancellable).then(candidates => {
+            const list = new CandidateList(candidates, configured, extensionPath, _('Show in top bar? Untick what you don’t want there.'));
+            if (!list.addable) {
+                stack.add_named(new Adw.StatusPage({
+                    title: _('No New Accounts Found'),
+                    description: candidates.length
+                        ? _('Every account signed in on this computer is already in Token Grill.')
+                        : _('Sign in with one of the supported apps, then try again.'),
+                    icon_name: 'system-search-symbolic',
+                }), 'empty');
+                stack.visible_child_name = 'empty';
+                cancel.label = _('Close');
+                return;
+            }
+            list.group.title = formatText(ngettext('Found %d New Account', 'Found %d New Accounts', list.addable), list.addable);
+            done.visible = true;
+            done.connect('clicked', () => {
+                onAdd(list.selected());
+                this.close();
+            });
+            const page = new Adw.PreferencesPage();
+            page.add(list.group);
+            stack.add_named(page, 'found');
+            stack.visible_child_name = 'found';
+        }).catch(error => {
+            if (!isCancellation(error))
+                logError(error, 'Token Grill');
+        });
     }
 }

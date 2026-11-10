@@ -141,3 +141,12 @@ export async function findCandidates(app: AccountApp, configured: ProviderInstan
     const identities = await configuredIdentities(configured, entries, cancellable);
     return FINDERS[app]({configured, identities, entries, cancellable});
 }
+
+// Discover: every app at once, sharing one read of OpenCode and the existing sign-ins.
+export async function findAllCandidates(configured: ProviderInstance[], cancellable: Gio.Cancellable): Promise<Candidate[]> {
+    const entries = await openCodeEntries(cancellable);
+    const identities = await configuredIdentities(configured, entries, cancellable);
+    const search = {configured, identities, entries, cancellable};
+    const found = await Promise.all(Object.values(FINDERS).map(find => find(search)));
+    return byStatus(found.flat());
+}

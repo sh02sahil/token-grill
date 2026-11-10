@@ -14,7 +14,6 @@ import type {ProviderInstance, ProviderKind} from '../core/types.js';
 import {AddAccountDialog} from './addAccountDialog.js';
 import {credentialLabel, credentialState} from './credentialStatus.js';
 import {DiscoverDialog} from './discoverDialog.js';
-import {discoverAccounts} from './discovery.js';
 import {clearApiKey} from './keyStore.js';
 import {ProviderEditorDialog} from './providerEditorDialog.js';
 import {ReorderDialog} from './reorderDialog.js';
@@ -189,23 +188,6 @@ export class AccountsPage extends Adw.PreferencesPage {
 
     private _discover(): void {
         const providers = readProviders(this._settings);
-        const {found, candidates} = discoverAccounts(providers);
-        if (found.length) {
-            const onAdd = (selected: ProviderInstance[]) => this._persist([...providers, ...selected]);
-            new DiscoverDialog(found, this._extensionPath, onAdd).present(this._window);
-            return;
-        }
-        const alert = candidates
-            ? new Adw.AlertDialog({
-                heading: _('All Discovered Accounts Are Already Configured'),
-                body: _('Every account home found on this computer is already in Token Grill.'),
-            })
-            : new Adw.AlertDialog({
-                heading: _('No New Accounts Found'),
-                body: _('Token Grill looked for Codex and Claude homes named ~/.codex* and ~/.claude*, ' +
-                    'the Kiro CLI data store, and Antigravity homes in ~/.gemini, ~/.antigravity, and ~/.config/Antigravity.'),
-            });
-        alert.add_response('close', _('Close'));
-        alert.present(this._window);
+        new DiscoverDialog(providers, this._extensionPath, added => this._persist([...readProviders(this._settings), ...added])).present(this._window);
     }
 }
