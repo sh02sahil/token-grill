@@ -29,11 +29,11 @@ export class NotificationsPage extends Adw.PreferencesPage {
 
         const alerts = new Adw.PreferencesGroup({
             title: _('Quota Alerts'),
-            description: _('Each account sends at most one alert when its selected limit crosses a usage step'),
+            description: _('Only limits shown in the top bar send alerts, once for each usage step'),
         });
         const enabled = new Adw.SwitchRow({
             title: _('Usage Notifications'),
-            subtitle: _('Follow the quota window selected for each account'),
+            subtitle: _('A DeepSeek balance also warns once when it drops below its warning amount'),
         });
         settings.bind('notifications-enabled', enabled, 'active', Gio.SettingsBindFlags.DEFAULT);
         const step = new Adw.SpinRow({

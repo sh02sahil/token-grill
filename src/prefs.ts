@@ -22,10 +22,10 @@ export default class TokenGrillPreferences extends ExtensionPreferences {
             return false;
         });
 
-        window.add(new GeneralPage(settings));
+        window.add(new GeneralPage(settings, window));
         window.add(new AccountsPage(settings, window, this.path));
         window.add(new NotificationsPage(settings, window));
-        window.add(new DataPage());
+        window.add(new DataPage(window, String(this.metadata['version-name'])));
         return Promise.resolve();
     }
 }

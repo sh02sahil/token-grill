@@ -311,3 +311,12 @@ test('nested shell inherits user settings and rejects conflicting Token Grill in
     assert.match(source, /^unset GDK_BACKEND$/m);
     assert.doesNotMatch(source, /gnome-extensions enable.*\|\| true/);
 });
+
+test('the diagnostics report is redacted again, saved privately, and closing the dialog is not an error', async () => {
+    const [page, store, runtime] = await Promise.all([read('src/prefs/dataPage.ts'), read('src/storage/diagnosticsStore.ts'), read('src/runtime.ts')]);
+    assert.match(page, /redact\(formatReport\(entries, header\), GLib\.get_home_dir\(\)\)/);
+    assert.match(page, /Gio\.FileCreateFlags\.PRIVATE/);
+    assert.match(page, /Gtk\.DialogError\.DISMISSED/);
+    assert.match(store, /detail: redact\(entry\.detail, this\._home\)/);
+    assert.match(runtime, /shell: Config\.PACKAGE_VERSION/);
+});
