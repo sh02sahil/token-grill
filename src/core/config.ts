@@ -35,21 +35,34 @@ export function writeProviders(settings: Gio.Settings, providers: ProviderInstan
     settings.set_uint('configuration-version', CONFIGURATION_VERSION);
 }
 
+// 0.3.x fields that only the upgrade reads: whether the account was a top-bar
+// tab, and the limit it showed there.
+function storedField(item: unknown, key: 'showInPanel' | 'panelWindowPreference'): unknown {
+    return item && typeof item === 'object' ? (item as Record<string, unknown>)[key] : undefined;
+}
+
+function legacyWindow(item: unknown, kind: ProviderKind): QuotaWindowPreference {
+    const metadata = providerMetadata(kind);
+    const stored = QUOTA_WINDOW_PREFERENCES.find(window => window === storedField(item, 'panelWindowPreference'));
+    if (!stored || (metadata.quotaWindows.length === 1 && stored !== metadata.quotaWindows[0]))
+        return metadata.defaultQuotaWindow;
+    return stored;
+}
+
 // Before 0.4.0 the top bar showed one account, the active one, with its
 // preferred limit; that account keeps that look and the others start hidden.
-function legacyTopBar(item: ProviderInstance, activeId: string | null): TopBarSelection {
-    if (item.id !== activeId)
+function legacyTopBar(provider: ProviderInstance, item: unknown, activeId: string | null): TopBarSelection {
+    if (provider.id !== activeId)
         return {automatic: false, limits: []};
-    if (item.panelWindowPreference === 'automatic')
-        return {automatic: true, limits: []};
-    return {automatic: false, limits: [item.panelWindowPreference]};
+    const window = legacyWindow(item, provider.kind);
+    return window === 'automatic' ? {automatic: true, limits: []} : {automatic: false, limits: [window]};
 }
 
 // The account 0.3.x showed in the top bar, chosen the way 0.3.x chose it.
-function legacyActiveId(providers: ProviderInstance[], activeId: string): string | null {
+function legacyActiveId(providers: ProviderInstance[], stored: unknown[], activeId: string): string | null {
     const enabled = providers.filter(provider => provider.enabled);
-    return (enabled.find(provider => provider.id === activeId) ??
-        enabled.find(provider => provider.showInPanel) ?? enabled[0])?.id ?? null;
+    const tab = providers.find((provider, index) => provider.enabled && storedField(stored[index], 'showInPanel') !== false);
+    return (enabled.find(provider => provider.id === activeId) ?? tab ?? enabled[0])?.id ?? null;
 }
 
 // A malformed legacy value is left untouched so it can still be recovered by hand;
@@ -64,10 +77,10 @@ export function migrateProviderSettings(settings: Gio.Settings): void {
     if (providers.length !== stored.length)
         return;
     if (version < CONFIGURATION_VERSION) {
-        const activeId = legacyActiveId(providers, settings.get_string('active-provider-id'));
+        const activeId = legacyActiveId(providers, stored, settings.get_string('active-provider-id'));
         providers = providers.map((provider, index) => hasTopBar(stored[index])
             ? provider
-            : {...provider, topBar: legacyTopBar(provider, activeId)});
+            : {...provider, topBar: legacyTopBar(provider, stored[index], activeId)});
     }
     writeProviders(settings, providers);
 }
@@ -82,14 +95,12 @@ export function newProvider(kind: ProviderKind, app: AccountApp, accountHome: st
         displayName: metadata.label,
         accent: metadata.defaultAccent,
         enabled: true,
-        showInPanel: true,
         sortOrder: 0,
         accountHome,
         authFileOverride: null,
         sessionsDirectoryOverride: null,
         liveUsageEnabled: true,
         localHistoryEnabled: false,
-        panelWindowPreference: metadata.defaultQuotaWindow,
         topBar: {automatic: true, limits: []},
         lowBalance: null,
     };
@@ -146,10 +157,6 @@ export function normalizeProvider(value: unknown): ProviderInstance[] {
     // Only a key pasted into the keyring has no home.
     if (!isValidPath(item.accountHome) && !(app === 'keyring' && item.accountHome === ''))
         return [];
-    const storedWindow = item.panelWindowPreference as QuotaWindowPreference;
-    let panelWindowPreference = QUOTA_WINDOW_PREFERENCES.includes(storedWindow) ? storedWindow : metadata.defaultQuotaWindow;
-    if (metadata.quotaWindows.length === 1 && panelWindowPreference !== metadata.quotaWindows[0])
-        panelWindowPreference = metadata.defaultQuotaWindow;
     const displayName = typeof item.displayName === 'string' ? item.displayName.trim() : '';
 
     return [{
@@ -160,14 +167,12 @@ export function normalizeProvider(value: unknown): ProviderInstance[] {
         displayName: displayName || metadata.label,
         accent: normalizeAccent(item.accent, metadata.defaultAccent),
         enabled: item.enabled !== false,
-        showInPanel: item.showInPanel !== false,
         sortOrder: typeof item.sortOrder === 'number' ? item.sortOrder : 0,
         accountHome: item.accountHome,
         authFileOverride: optionalPath(item.authFileOverride),
         sessionsDirectoryOverride: optionalPath(item.sessionsDirectoryOverride),
         liveUsageEnabled: item.liveUsageEnabled !== false,
         localHistoryEnabled: metadata.localHistorySupported && app === metadata.apps[0] && item.localHistoryEnabled === true,
-        panelWindowPreference,
         topBar: normalizeTopBar(item.topBar),
         lowBalance: typeof item.lowBalance === 'number' && Number.isFinite(item.lowBalance) && item.lowBalance >= 0 ? item.lowBalance : null,
     }];

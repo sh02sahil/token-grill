@@ -2,7 +2,7 @@ import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import St from 'gi://St';
 
-import {accentStyleClass} from '../core/accent.js';
+import {accentHex} from '../core/accent.js';
 import {providerIconFile} from '../core/providerMetadata.js';
 import type {ProviderInstance, ProviderKind} from '../core/types.js';
 
@@ -22,15 +22,21 @@ export function providerIcon(extensionPath: string, kind: ProviderKind, size: nu
     });
 }
 
-// A small dot in the account's GNOME accent colour.  It always sits next to
-// the account name or icon, so colour is never the only way to tell accounts apart.
-export function accentDot(instance: Pick<ProviderInstance, 'accent'>, size: number): St.Widget {
-    return new St.Widget({
-        width: size,
-        height: size,
-        style_class: `tokengrill-account-dot ${accentStyleClass(instance.accent)}`,
-        y_align: Clutter.ActorAlign.CENTER,
+// A small dot in the account's colour.  It always sits next to the account
+// name or icon, so colour is never the only way to tell accounts apart.  The
+// colour is the user's own choice, so it is drawn rather than styled (UI-10).
+export function accentDot(instance: Pick<ProviderInstance, 'accent'>, size: number): St.DrawingArea {
+    const value = Number.parseInt(accentHex(instance.accent).slice(1), 16);
+    const area = new St.DrawingArea({width: size, height: size, y_align: Clutter.ActorAlign.CENTER});
+    area.connect('repaint', () => {
+        const cr = area.get_context();
+        const [width, height] = area.get_surface_size();
+        cr.setSourceRGBA((value >> 16 & 255) / 255, (value >> 8 & 255) / 255, (value & 255) / 255, 1);
+        cr.arc(width / 2, height / 2, Math.min(width, height) / 2, 0, Math.PI * 2);
+        cr.fill();
+        cr.$dispose();
     });
+    return area;
 }
 
 export function providerMark(extensionPath: string, instance: ProviderInstance, size: number): St.Widget {

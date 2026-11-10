@@ -37,9 +37,11 @@ test('invalid override paths are dropped rather than rejecting the account', () 
     assert.equal(provider.sessionsDirectoryOverride, '~/sessions');
 });
 
-test('single-window kinds always use their only window', () => {
-    const [kiro] = normalizeProvider(entry({kind: 'kiro', accountHome: '/home/test/.local/share/kiro-cli', panelWindowPreference: 'weekly'}));
-    assert.equal(kiro.panelWindowPreference, 'monthly');
+test('a single-window account upgrades to its only limit', () => {
+    const settings = fakeSettings([v031('k1', 'kiro', 'weekly')], 2, 'k1');
+    migrateProviderSettings(settings);
+    const [kiro] = readProviders(settings);
+    assert.deepEqual(kiro.topBar, {automatic: false, limits: ['monthly']});
     assert.equal(kiro.localHistoryEnabled, false);
 });
 
@@ -118,13 +120,15 @@ test('migration gives existing accounts their native app', () => {
         ['claude-code', 'codex-cli', 'codex-cli', 'codex-cli', 'kiro-cli', 'antigravity', 'claude-code']);
 });
 
+// 0.3.x needs entry format 2, an id, a kind it knows and a home; it fills in the rest.
 test('migrated entries stay readable by 0.3.x', () => {
     const settings = fakeSettings(realConfiguration(), 2, 'a1');
     migrateProviderSettings(settings);
     for (const stored of JSON.parse(settings.values['provider-instances-json'])) {
         assert.equal(stored.schemaVersion, 2);
-        assert.equal(typeof stored.showInPanel, 'boolean');
-        assert.ok(['automatic', 'five-hour', 'weekly', 'monthly'].includes(stored.panelWindowPreference));
+        assert.equal(typeof stored.id, 'string');
+        assert.ok(['codex', 'claude', 'kiro', 'antigravity'].includes(stored.kind));
+        assert.equal(typeof stored.accountHome, 'string');
     }
 });
 

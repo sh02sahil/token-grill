@@ -4,19 +4,16 @@ import {readFile} from 'node:fs/promises';
 
 const read = path => readFile(new URL(`../../${path}`, import.meta.url), 'utf8');
 
-test('provider marks use fixed geometry and borderless accent dots styled from the stylesheet', async () => {
-    const [source, css] = await Promise.all([
-        read('src/shell/accountChip.ts'),
-        read('resources/stylesheet.css'),
-    ]);
+// Account colours are the user's data, including custom ones, so dots are drawn rather than styled.
+test('provider marks use fixed geometry and drawn accent dots', async () => {
+    const source = await read('src/shell/accountChip.ts');
     assert.match(source, /new Clutter\.FixedLayout\(\)/);
     assert.match(source, /y_align: Clutter\.ActorAlign\.CENTER/);
     assert.match(source, /const MARK_DOT_SIZE = 6/);
-    assert.match(source, /tokengrill-account-dot \$\{accentStyleClass\(instance\.accent\)\}/);
-    assert.doesNotMatch(source, /set_style\(/);
-    assert.match(css, /\.tokengrill-account-dot \{ border: 0; border-radius: 4px; \}/);
-    for (const accent of ['blue', 'teal', 'green', 'yellow', 'orange', 'red', 'pink', 'purple', 'slate'])
-        assert.match(css, new RegExp(`\\.tokengrill-accent-${accent} \\{ background-color: #[0-9a-f]{6}; \\}`));
+    assert.match(source, /accentHex\(instance\.accent\)/);
+    assert.match(source, /new St\.DrawingArea\(/);
+    assert.match(source, /cr\.\$dispose\(\)/);
+    assert.doesNotMatch(source, /set_style\(|style: `/);
 });
 
 test('the popup is built from native shell menu items and theme styles', async () => {
@@ -107,9 +104,9 @@ test('Kiro details are monthly-only and show precise credits', async () => {
 });
 
 test('Kiro discovery checks the user-wide data store once and disables history', async () => {
-    const [discovery, editor] = await Promise.all([read('src/prefs/discovery.ts'), read('src/prefs/providerEditorDialog.ts')]);
+    const [discovery, account] = await Promise.all([read('src/prefs/discovery.ts'), read('src/prefs/accountPage.ts')]);
     assert.match(discovery, /newProvider\('kiro', 'kiro-cli', defaultHome\('kiro'\)\)/);
-    assert.match(editor, /localHistoryEnabled: metadata\.localHistorySupported && this\._history\.active/);
+    assert.match(account, /if \(metadata\.localHistorySupported && provider\.app === metadata\.apps\[0\]\) \{/);
     assert.doesNotMatch(discovery, /\.t3/);
 });
 
@@ -169,7 +166,7 @@ test('notifications use per-account sources with symbolic icons and lifecycle cl
 test('provider preferences use direct editing, confirmed deletion, and normalized reorder controls', async () => {
     const [page, editor, reorder, general] = await Promise.all([
         read('src/prefs/accountsPage.ts'),
-        read('src/prefs/providerEditorDialog.ts'),
+        read('src/prefs/accountPage.ts'),
         read('src/prefs/reorderDialog.ts'),
         read('src/prefs/generalPage.ts'),
     ]);
@@ -182,11 +179,12 @@ test('provider preferences use direct editing, confirmed deletion, and normalize
     assert.match(page, /label: _\('Add Account…'\)/);
     assert.match(page, /new AddAccountDialog\(/);
     assert.match(page, /reorderProviders\(providers, providers\.map/);
-    assert.match(editor, /new Adw\.ButtonRow\(\{title: _\('Delete Account'\)/);
+    // The account page applies each change at once, so there is nothing to discard.
+    assert.match(editor, /new Adw\.ButtonRow\(\{title: _\('Remove Account'\)/);
     assert.match(editor, /remove\.add_css_class\('destructive-action'\)/);
-    assert.match(editor, /heading: _\('Delete Account\?'\)/);
-    assert.match(editor, /heading: _\('Discard Changes\?'\)/);
-    assert.match(editor, /if \(response !== 'delete'\)/);
+    assert.match(editor, /heading: _\('Remove Account\?'\)/);
+    assert.match(editor, /if \(response !== 'remove'\)/);
+    assert.match(page, /this\._window\.push_subpage\(new AccountPage\(/);
     assert.match(general, /new Adw\.ToggleGroup/);
     assert.match(reorder, /new Gtk\.DragSource/);
     assert.match(reorder, /Gtk\.DropTarget\.new/);
@@ -297,15 +295,11 @@ test('review artifacts exclude compiled schemas and use the pinned Shexli runner
     assert.match(checker, /report\.summary\.finding_count/);
 });
 
-test('new provider defaults are generated and validation errors stay field-specific', async () => {
-    const source = await read('src/prefs/providerEditorDialog.ts');
-    assert.match(source, /function generatedDefaults\(kind: ProviderKind\)/);
-    assert.match(source, /displayPath\(defaultHome\(kind\)\)/);
-    assert.match(source, /markField\(this\._name, errors\.displayName\)/);
-    assert.match(source, /markField\(this\._home, errors\.accountHome\)/);
-    assert.match(source, /markField\(this\._auth, errors\.authFileOverride\)/);
-    assert.match(source, /markField\(this\._sessions, errors\.sessionsDirectoryOverride\)/);
-    assert.doesNotMatch(source, /_nameEdited|_homeEdited|_accentEdited/);
+test('account paths apply only when valid, and each error stays on its own field', async () => {
+    const source = await read('src/prefs/accountPage.ts');
+    assert.match(source, /validateProviderDraft\(draft, others, expandPath\)/);
+    assert.match(source, /markField\(row, errors\[field\]\);\s*if \(errors\[field\]\)\s*return;/);
+    assert.match(source, /markField\(row, 'required'\)/);
 });
 
 test('nested shell inherits user settings and rejects conflicting Token Grill installs', async () => {

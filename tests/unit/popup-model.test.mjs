@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {ACCENT_COLORS, accentStyleClass, normalizeAccent} from '../../build/tests/accent.mjs';
+import {ACCENT_COLORS, accentHex, normalizeAccent} from '../../build/tests/accent.mjs';
 import {UNTRANSLATED} from '../../build/tests/i18n.mjs';
 import {accountGroups, errorText, historySummary, refreshStatusText, shortAccountName, windowCaption} from '../../build/tests/popup-model.mjs';
 
@@ -9,8 +9,9 @@ const provider = (id, kind, displayName, extra = {}) => ({id, kind, displayName,
 test('account accents use the GNOME accent palette and migrate the previous custom names', () => {
     assert.deepEqual(Object.keys(ACCENT_COLORS), ['blue', 'teal', 'green', 'yellow', 'orange', 'red', 'pink', 'purple', 'slate']);
     assert.equal(ACCENT_COLORS.blue, '#3584e4');
-    assert.equal(accentStyleClass('slate'), 'tokengrill-accent-slate');
-    assert.equal(accentStyleClass('cyan'), 'tokengrill-accent-teal');
+    assert.equal(accentHex('slate'), '#6f8396');
+    assert.equal(accentHex(normalizeAccent('cyan', 'green')), '#2190a4');
+    assert.equal(accentHex('#986a44'), '#986a44');
     assert.equal(normalizeAccent('cyan', 'green'), 'teal');
     assert.equal(normalizeAccent('amber', 'green'), 'yellow');
     assert.equal(normalizeAccent('purple', 'green'), 'purple');

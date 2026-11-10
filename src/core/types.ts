@@ -52,14 +52,12 @@ export interface ProviderInstance {
     displayName: string;
     accent: AccentValue;
     enabled: boolean;
-    showInPanel: boolean;
     sortOrder: number;
     accountHome: string;
     authFileOverride: string | null;
     sessionsDirectoryOverride: string | null;
     liveUsageEnabled: boolean;
     localHistoryEnabled: boolean;
-    panelWindowPreference: QuotaWindowPreference;
     topBar: TopBarSelection;
     lowBalance: number | null;
 }

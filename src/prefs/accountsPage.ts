@@ -11,11 +11,10 @@ import {providerMetadata} from '../core/providerMetadata.js';
 import {reorderProviders} from '../core/providerOrder.js';
 import {topBarSummary} from '../core/topBar.js';
 import type {ProviderInstance, ProviderKind} from '../core/types.js';
+import {AccountPage} from './accountPage.js';
 import {AddAccountDialog} from './addAccountDialog.js';
 import {credentialLabel, credentialState} from './credentialStatus.js';
 import {DiscoverDialog} from './discoverDialog.js';
-import {clearApiKey} from './keyStore.js';
-import {ProviderEditorDialog} from './providerEditorDialog.js';
 import {ReorderDialog} from './reorderDialog.js';
 import {TRANSLATOR} from './translator.js';
 import {providerIcon, setAccessibleLabel} from './widgets.js';
@@ -166,20 +165,13 @@ export class AccountsPage extends Adw.PreferencesPage {
     }
 
     private _edit(provider: ProviderInstance): void {
-        const onSave = (value: ProviderInstance) => {
-            this._persist(readProviders(this._settings).map(item => item.id === value.id ? value : item));
-        };
-        const onDelete = (providerId: string) => {
-            this._persist(readProviders(this._settings).filter(item => item.id !== providerId));
-            if (provider.app === 'keyring')
-                this._forgetKey(providerId);
-        };
-        new ProviderEditorDialog(this._settings, provider, onSave, onDelete).present(this._window);
-    }
-
-    // The pasted key goes with its account; the window may close before the keyring answers.
-    private _forgetKey(providerId: string): void {
-        clearApiKey(providerId, null).catch(error => logError(error, 'Token Grill'));
+        this._window.push_subpage(new AccountPage(this._settings, provider, {
+            update: value => this._persist(readProviders(this._settings).map(item => item.id === value.id ? value : item)),
+            remove: providerId => {
+                this._persist(readProviders(this._settings).filter(item => item.id !== providerId));
+                this._window.pop_subpage();
+            },
+        }));
     }
 
     private _reorder(providers: ProviderInstance[]): void {

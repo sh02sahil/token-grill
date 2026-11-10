@@ -11,7 +11,7 @@ import {formatText} from '../core/i18n.js';
 import {providerMetadata} from '../core/providerMetadata.js';
 import type {TopBarAccount, TopBarGroup} from '../core/topBar.js';
 import type {PanelDisplayStyle, PanelPercentageMode} from '../core/types.js';
-import {providerIcon} from './accountChip.js';
+import {accentDot, providerIcon} from './accountChip.js';
 import {TRANSLATOR} from './translator.js';
 
 // Ring radius and stroke width per number of nested limits, on a 19 px canvas.
@@ -112,7 +112,7 @@ function barStack(account: TopBarAccount, mode: PanelPercentageMode): St.Drawing
 }
 
 function dot(account: TopBarAccount): St.DrawingArea {
-    return drawingArea(DOT_SIZE + 1, DOT_SIZE + 1, (_area, cr) => fillDot(cr, hexRgb(accentHex(account.accent)), (DOT_SIZE + 1) / 2, (DOT_SIZE + 1) / 2, DOT_SIZE / 2));
+    return accentDot(account, DOT_SIZE);
 }
 
 function attention(): St.Icon {

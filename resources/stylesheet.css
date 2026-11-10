@@ -6,19 +6,6 @@
 .tokengrill-provider-mark { min-width: 20px; min-height: 20px; max-width: 20px; max-height: 20px; }
 .tokengrill-panel-value { font-feature-settings: "tnum"; }
 
-/* Account dots use the GNOME accent palette (libadwaita Adw.AccentColor). */
-.tokengrill-account-dot { border: 0; border-radius: 4px; }
-.tokengrill-provider-mark .tokengrill-account-dot { border-radius: 3px; }
-.tokengrill-accent-blue { background-color: #3584e4; }
-.tokengrill-accent-teal { background-color: #2190a4; }
-.tokengrill-accent-green { background-color: #3a944a; }
-.tokengrill-accent-yellow { background-color: #c88800; }
-.tokengrill-accent-orange { background-color: #ed5b00; }
-.tokengrill-accent-red { background-color: #e62d42; }
-.tokengrill-accent-pink { background-color: #d56199; }
-.tokengrill-accent-purple { background-color: #9141ac; }
-.tokengrill-accent-slate { background-color: #6f8396; }
-
 /* Popup */
 .tokengrill-menu { min-width: 23em; max-width: 26em; }
 

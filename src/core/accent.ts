@@ -39,7 +39,3 @@ export function accentHex(accent: AccentValue): string {
 }
 
 // Custom colours have no style class; they are drawn from accentHex().
-export function accentStyleClass(accent: AccentValue): string {
-    const normalized = normalizeAccent(accent, 'blue');
-    return `tokengrill-accent-${isPaletteName(normalized) ? normalized : 'custom'}`;
-}
