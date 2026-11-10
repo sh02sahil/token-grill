@@ -68,8 +68,3 @@ export function validateProviderDraft(
 
     return {valid: Object.keys(errors).length === 0, errors};
 }
-
-export function firstProviderValidationError(result: ProviderValidationResult): ProviderValidationCode | null {
-    const {errors} = result;
-    return errors.displayName ?? errors.accountHome ?? errors.authFileOverride ?? errors.sessionsDirectoryOverride ?? null;
-}

@@ -1,23 +1,17 @@
 import {formatText, type Translator} from './i18n.js';
+import {BALANCE_KEY} from './types.js';
 import type {
     Balance,
-    CanonicalQuotaWindow,
     PanelPercentageMode,
     ProviderInstance,
     ProviderSnapshot,
-    QuotaWindowPreference,
     UsageWindow,
 } from './types.js';
 
-// Providers that do not tag their windows are matched by id or label.
-const WINDOW_PATTERNS: Record<Exclude<CanonicalQuotaWindow, 'other'>, RegExp> = {
-    'five-hour': /five|5.?hour|session/i,
-    'weekly': /week/i,
-    'monthly': /month/i,
-};
-
-export function limitName(tr: Translator, window: Pick<UsageWindow, 'canonicalWindow' | 'label'>): string {
+export function limitName(tr: Translator, window: Pick<UsageWindow, 'id' | 'canonicalWindow' | 'label'>): string {
     const {_} = tr;
+    if (window.id === BALANCE_KEY)
+        return _('Balance');
     switch (window.canonicalWindow) {
     case 'five-hour':
         return _('Five-hour');
@@ -35,26 +29,14 @@ export function activeProvider(providers: ProviderInstance[], activeId: string):
     return enabled.find(provider => provider.id === activeId) ?? enabled[0] ?? null;
 }
 
-function highestWindow(windows: UsageWindow[]): UsageWindow | null {
+// Pick Automatically shows the limit with the most usage.
+export function mostUsedWindow(snapshot: Pick<ProviderSnapshot, 'windows'> | null): UsageWindow | null {
     let highest: UsageWindow | null = null;
-    for (const window of windows) {
+    for (const window of snapshot?.windows ?? []) {
         if ((window.percent ?? -1) > (highest?.percent ?? -1))
             highest = window;
     }
     return highest;
-}
-
-// The window the account's preference asks for, falling back to the most used one.
-export function selectWindow(snapshot: Pick<ProviderSnapshot, 'windows'> | null, preference: QuotaWindowPreference): UsageWindow | null {
-    const windows = snapshot?.windows ?? [];
-    if (preference !== 'automatic') {
-        const pattern = WINDOW_PATTERNS[preference];
-        const selected = windows.find(window => window.canonicalWindow === preference) ??
-            windows.find(window => pattern.test(`${window.id} ${window.label}`));
-        if (selected)
-            return selected;
-    }
-    return highestWindow(windows);
 }
 
 export function displayPercent(window: UsageWindow | null, mode: PanelPercentageMode): number | null {

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {UNTRANSLATED} from '../../build/tests/i18n.mjs';
-import {activeProvider, displayLabel, displayPercent, pressureClass, selectWindow} from '../../build/tests/display.mjs';
+import {activeProvider, displayLabel, displayPercent, limitName, mostUsedWindow, pressureClass} from '../../build/tests/display.mjs';
 
 const windows = [
     {id: 'five', canonicalWindow: 'five-hour', label: 'Five-hour', percent: 0.42},
@@ -23,11 +23,8 @@ test('missing quota readings remain unavailable', () => {
 });
 
 test('window selection honours the preference, label patterns, then the most used window', () => {
-    assert.equal(selectWindow({windows}, 'five-hour').id, 'five');
-    assert.equal(selectWindow({windows}, 'automatic').id, 'week');
-    assert.equal(selectWindow({windows}, 'monthly').id, 'week', 'missing windows fall back to the highest');
-    assert.equal(selectWindow({windows: [{id: 'session', canonicalWindow: 'other', label: 'Session', percent: 0.1}]}, 'five-hour').id, 'session');
-    assert.equal(selectWindow(null, 'automatic'), null);
+    assert.equal(mostUsedWindow({windows}).id, 'week');
+    assert.equal(mostUsedWindow(null), null);
 });
 
 test('pressure thresholds and active account fallback', () => {
@@ -37,4 +34,10 @@ test('pressure thresholds and active account fallback', () => {
     const providers = [{id: 'a', enabled: false}, {id: 'b', enabled: true}, {id: 'c', enabled: true}];
     assert.equal(activeProvider(providers, 'a').id, 'b');
     assert.equal(activeProvider(providers, 'c').id, 'c');
+});
+
+test('the balance limit is named through the translator', () => {
+    const tr = {_: text => `«${text}»`, ngettext: text => text};
+    assert.equal(limitName(tr, {id: 'balance', canonicalWindow: 'other', label: 'Balance'}), '«Balance»');
+    assert.equal(limitName(tr, {id: 'Spark:weekly', canonicalWindow: 'other', label: 'Spark · Weekly'}), 'Spark · Weekly');
 });

@@ -2,8 +2,6 @@ import type Gio from 'gi://Gio';
 
 import {gettext as _} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 import {CollectorError} from '../core/errors.js';
-import {displayPath, pathExists, providerPaths} from '../core/paths.js';
-import {providerMetadata} from '../core/providerMetadata.js';
 import type {ProviderInstance, ProviderKind} from '../core/types.js';
 import {antigravityCredentialStatus} from '../providers/antigravity/auth.js';
 import {loadClaudeAccessToken} from '../providers/claude/auth.js';
@@ -83,21 +81,4 @@ export function credentialLabel(state: CredentialState): string {
         'libsecret-missing': _('System keyring or libsecret 1 unavailable'),
     };
     return labels[state];
-}
-
-function historyLabel(provider: ProviderInstance): string {
-    if (!providerMetadata(provider.kind).localHistorySupported)
-        return _('Local history unavailable');
-    if (providerPaths(provider).historyDirectories.some(pathExists))
-        return _('Local history available');
-    return _('No local history directory');
-}
-
-export function providerSubtitle(provider: ProviderInstance, status: string): string {
-    return [
-        providerMetadata(provider.kind).label,
-        displayPath(provider.accountHome),
-        status,
-        historyLabel(provider),
-    ].join(' · ');
 }

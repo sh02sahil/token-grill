@@ -1,7 +1,8 @@
 // What the top bar shows: one entry per service, holding the accounts the user
 // ticked in the popup.  Pure, so the Shell code only draws the result.
-import {limitName, selectWindow} from './display.js';
+import {limitName, mostUsedWindow} from './display.js';
 import type {Translator} from './i18n.js';
+import {BALANCE_KEY} from './types.js';
 import type {
     AccentValue,
     Balance,
@@ -12,8 +13,6 @@ import type {
     TopBarSelection,
     UsageWindow,
 } from './types.js';
-
-export const BALANCE_KEY = 'balance';
 
 const WINDOW_RANK: Record<CanonicalQuotaWindow, number> = {
     'five-hour': 0,
@@ -56,7 +55,7 @@ export function isShown(instance: Pick<ProviderInstance, 'topBar'>): boolean {
 
 export function shownLimits(instance: Pick<ProviderInstance, 'topBar'>, snapshot: WindowsOf): UsageWindow[] {
     if (instance.topBar.automatic) {
-        const pressing = selectWindow(snapshot ?? null, 'automatic');
+        const pressing = mostUsedWindow(snapshot ?? null);
         return pressing ? [pressing] : [];
     }
     return orderedLimits(snapshot).filter(window => instance.topBar.limits.includes(limitKey(window)));
@@ -96,7 +95,7 @@ export function topBarSummary(tr: Translator, selection: TopBarSelection): strin
         if (key === BALANCE_KEY)
             return _('Balance');
         const canonical = (['five-hour', 'weekly', 'monthly'] as const).find(window => window === key);
-        return canonical ? limitName(tr, {canonicalWindow: canonical, label: ''}) : key.replaceAll('_', ' ');
+        return canonical ? limitName(tr, {id: canonical, canonicalWindow: canonical, label: ''}) : key.replaceAll('_', ' ');
     }).join(', ');
 }
 
@@ -112,7 +111,9 @@ export function topBarGroups(providers: ProviderInstance[], snapshots: Map<strin
         }
         const snapshot = snapshots.get(provider.id);
         const limits = shownLimits(provider, snapshot);
-        const balance = provider.topBar.limits.includes(BALANCE_KEY) ? snapshot?.balance ?? null : null;
+        // Pick Automatically shows the balance meter of a balance service, so it warns too.
+        const showsBalance = provider.topBar.limits.includes(BALANCE_KEY) || limits.some(window => limitKey(window) === BALANCE_KEY);
+        const balance = showsBalance ? snapshot?.balance ?? null : null;
         const low = balance !== null && provider.lowBalance !== null && balance.amount < provider.lowBalance;
         group.accounts.push({id: provider.id, name: provider.displayName, accent: provider.accent, limits, balance, low, missing: !limits.length && !balance});
     }

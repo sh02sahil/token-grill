@@ -2,7 +2,7 @@ import type {AccentColor, AccentValue} from './types.js';
 
 // GNOME's accent palette (libadwaita Adw.AccentColor.to_rgba), so account
 // markers match the colours users already know from Settings → Appearance.
-// The Shell draws them from stylesheet.css; preferences uses these values.
+// The Shell and the preferences draw account dots from these values.
 export const ACCENT_COLORS: Record<AccentColor, string> = {
     blue: '#3584e4',
     teal: '#2190a4',

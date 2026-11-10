@@ -1,6 +1,6 @@
 import {clampFraction, isRecord, numberAt, recordAt, stringAt, toEpochMs} from '../../core/json.js';
 import type {CanonicalQuotaWindow, UsageWindow} from '../../core/types.js';
-import {windowLabel} from '../windows.js';
+import {claimType} from '../windows.js';
 
 const HOUR_SECONDS = 60 * 60;
 const DAY_SECONDS = 24 * HOUR_SECONDS;
@@ -22,15 +22,17 @@ function canonicalFor(seconds: number | null): CanonicalQuotaWindow {
 
 // `used_percent` is in percentage points (0-100), including fractional values:
 // 1 means 1% used, not a fully consumed ratio.
-function normalizeWindow(window: Record<string, unknown>, name: string, index: number): UsageWindow | null {
+// The plan's own windows keep their position-based ids; a model limit is named
+// after the model and its window, so a choice in the popup follows it.
+function normalizeWindow(window: Record<string, unknown>, name: string | null, index: number, claimed: Set<CanonicalQuotaWindow>): UsageWindow | null {
     const percentagePoints = numberAt(window, 'used_percent');
     if (percentagePoints === null)
         return null;
-    const canonicalWindow = canonicalFor(numberAt(window, 'limit_window_seconds'));
+    const duration = canonicalFor(numberAt(window, 'limit_window_seconds'));
+    const type = claimType(claimed, duration, name ?? 'Usage limit');
     return {
-        id: `${canonicalWindow}-${index}`,
-        canonicalWindow,
-        label: windowLabel(canonicalWindow, name),
+        id: name === null ? `${type.canonicalWindow}-${index}` : `${name}:${duration}`,
+        ...type,
         used: null,
         limit: null,
         percent: clampFraction(percentagePoints / 100),
@@ -49,8 +51,8 @@ function rateLimitWindows(rateLimit: Record<string, unknown> | null): Record<str
 export function normalizeCodexUsage(payload: unknown): CodexUsage {
     if (!isRecord(payload))
         return {windows: [], plan: null};
-    const sources: Array<[Record<string, unknown>, string]> = rateLimitWindows(recordAt(payload, 'rate_limit'))
-        .map(window => [window, 'Usage limit']);
+    const sources: Array<[Record<string, unknown>, string | null]> = rateLimitWindows(recordAt(payload, 'rate_limit'))
+        .map(window => [window, null]);
     // Plans with model-specific limits list them separately, each with its own windows.
     const additional = Array.isArray(payload.additional_rate_limits) ? payload.additional_rate_limits.filter(isRecord) : [];
     for (const limit of additional) {
@@ -59,8 +61,9 @@ export function normalizeCodexUsage(payload: unknown): CodexUsage {
             sources.push([window, name]);
     }
     const windows: UsageWindow[] = [];
+    const claimed = new Set<CanonicalQuotaWindow>();
     for (const [window, name] of sources) {
-        const normalized = normalizeWindow(window, name, windows.length);
+        const normalized = normalizeWindow(window, name, windows.length, claimed);
         if (normalized)
             windows.push(normalized);
     }

@@ -138,3 +138,8 @@ test('a reset time that drifts by milliseconds is the same reset', () => {
     const next = checkMilestone(seeded.checkpoint, {...window, resetAt: 1794271199875, percent: 0.91}, 10);
     assert.equal(next.notify, true);
 });
+
+test('a damaged 0.3.x alert entry is dropped instead of stopping the start', () => {
+    const migrated = migrateNotificationState({'a:selected-limit': {providerId: 'a', lastNotifiedBucket: 2, configuredStep: 10}});
+    assert.deepEqual(migrated, {});
+});

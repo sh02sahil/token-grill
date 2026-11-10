@@ -58,11 +58,15 @@ Changes in behavior:
 - If you select an account in the popup, the top bar does not change. To change
   the top bar, check the limits in the popup.
 - When you upgrade from 0.3, the account that the top bar showed keeps its
-  limit in the top bar. The other accounts are not in the top bar until you
+  limit in the top bar. If the service does not report that limit, the account
+  uses Pick Automatically. The other accounts are not in the top bar until you
   check their limits.
 
 Bug fixes:
 
+- Token Grill does not ask you to unlock the keyring. Before this fix, a locked
+  keyring could show an unlock prompt during the refresh of an Antigravity
+  account.
 - Claude alerts operate again. Before this fix, each refresh started the alert
   steps of a Claude limit again.
 - The Claude sign-in hint names the correct command: `claude auth login`.

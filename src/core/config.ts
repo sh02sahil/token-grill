@@ -44,8 +44,11 @@ function storedField(item: unknown, key: 'showInPanel' | 'panelWindowPreference'
 function legacyWindow(item: unknown, kind: ProviderKind): QuotaWindowPreference {
     const metadata = providerMetadata(kind);
     const stored = QUOTA_WINDOW_PREFERENCES.find(window => window === storedField(item, 'panelWindowPreference'));
-    if (!stored || (metadata.quotaWindows.length === 1 && stored !== metadata.quotaWindows[0]))
+    if (!stored)
         return metadata.defaultQuotaWindow;
+    // 0.3.x fell back to the most used limit when the service did not report the chosen one.
+    if (stored !== 'automatic' && !metadata.quotaWindows.includes(stored))
+        return metadata.quotaWindows.length === 1 ? metadata.defaultQuotaWindow : 'automatic';
     return stored;
 }
 
@@ -83,6 +86,16 @@ export function migrateProviderSettings(settings: Gio.Settings): void {
             : {...provider, topBar: legacyTopBar(provider, stored[index], activeId)});
     }
     writeProviders(settings, providers);
+}
+
+const READ_FIELDS = ['kind', 'app', 'accountHome', 'authFileOverride', 'sessionsDirectoryOverride', 'liveUsageEnabled', 'localHistoryEnabled'] as const;
+
+// Name, colour, top-bar and warning changes need no new reading; a new account,
+// one turned back on, or a change to how it is read does.
+export function needsRefresh(previous: ProviderInstance | undefined, next: ProviderInstance): boolean {
+    if (!previous || (next.enabled && !previous.enabled))
+        return true;
+    return READ_FIELDS.some(field => previous[field] !== next[field]);
 }
 
 export function newProvider(kind: ProviderKind, app: AccountApp, accountHome: string): ProviderInstance {

@@ -5,10 +5,11 @@ import Soup from 'gi://Soup';
 import type {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Config from 'resource:///org/gnome/shell/misc/config.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
-import {migrateProviderSettings, readProviders, writeProviders} from './core/config.js';
+import {migrateProviderSettings, needsRefresh, readProviders, writeProviders} from './core/config.js';
 import {accountLabel, requestDetail, shapeOf, type DiagnosticEntry} from './core/diagnostics.js';
 import {activeProvider} from './core/display.js';
 import {CollectorError} from './core/errors.js';
+import {providerPaths} from './core/paths.js';
 import {isCancellation} from './core/gio.js';
 import {parseTestNotificationRequest} from './core/notificationPolicy.js';
 import {Scheduler, type SchedulerJob} from './core/scheduler.js';
@@ -232,6 +233,7 @@ export class Runtime implements IndicatorController {
             this._render();
             return;
         }
+        const before = new Map(this._providers.map(provider => [provider.id, provider]));
         const retained = new Set(next.map(provider => provider.id));
         const removed = this._providers.filter(provider => !retained.has(provider.id)).map(provider => provider.id);
         for (const id of removed) {
@@ -245,7 +247,8 @@ export class Runtime implements IndicatorController {
         this._ensureActiveProvider();
         this._scheduler!.setProviders(next);
         this._render();
-        this._refreshEnabled();
+        // A rename or a colour from the account page needs no new reading.
+        this._scheduler!.refresh(next.filter(provider => provider.enabled && needsRefresh(before.get(provider.id), provider)).map(provider => provider.id));
     }
 
     // Startup and configuration changes refresh silently, so a paused session is not reported as failed.
@@ -328,6 +331,7 @@ export class Runtime implements IndicatorController {
             },
         };
 
+        this._record(provider, 'sign-in', this._signInSource(provider));
         const previous = this._snapshots.get(provider.id) ?? null;
         let snapshot: ProviderSnapshot;
         try {
@@ -344,6 +348,9 @@ export class Runtime implements IndicatorController {
             return;
 
         this._snapshots.set(provider.id, snapshot);
+        // Sign-in problems end a refresh before any request, so they are recorded here.
+        if (snapshot.errorInfo)
+            this._record(provider, 'error', `refresh: ${snapshot.errorInfo.code}`);
         const settings = this._settings!;
         if (settings.get_boolean('notifications-enabled'))
             this._notifications!.notifyMilestones(provider, snapshot, settings.get_uint('notification-step-percent'), this._percentageMode());
@@ -365,6 +372,12 @@ export class Runtime implements IndicatorController {
         const entry = this._diagnostics!.record({at: Date.now(), account: accountLabel(provider.kind, index + 1), kind: provider.kind, app: provider.app, step, detail});
         if (this._settings!.get_boolean('diagnostics-journal'))
             this._extension.getLogger().log(`${entry.account} (${entry.app}) ${entry.step}: ${entry.detail}`);
+    }
+
+    // Testers' reports must show which file or keyring item an app's sign-in came from.
+    private _signInSource(provider: ProviderInstance): string {
+        const path = provider.app === 'keyring' || provider.app === 'copilot-cli' ? '' : providerPaths(provider).authFile;
+        return path ? `${provider.app} ${path}` : `${provider.app} keyring`;
     }
 
     // Nothing is recorded once disable() has cancelled the refresh.

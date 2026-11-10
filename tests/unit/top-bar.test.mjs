@@ -86,3 +86,11 @@ test('the top-bar summary names the chosen limits', () => {
     assert.equal(topBarSummary(UNTRANSLATED, {automatic: false, limits: ['five-hour', 'weekly']}), 'Five-hour, Weekly');
     assert.equal(topBarSummary(UNTRANSLATED, {automatic: false, limits: ['balance', 'seven_day_opus']}), 'Balance, seven day opus');
 });
+
+test('a DeepSeek account on Pick Automatically still warns of a low balance', () => {
+    const balance = {amount: 3, currency: 'CNY'};
+    const meter = window('balance', 'other', 0.9);
+    const groups = topBarGroups([account('d', 'deepseek', auto, {lowBalance: 10})], new Map([['d', snapshot([meter], {balance})]]));
+    assert.equal(groups[0].accounts[0].low, true);
+    assert.deepEqual(groups[0].accounts[0].balance, balance);
+});

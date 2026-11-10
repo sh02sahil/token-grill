@@ -50,6 +50,9 @@ function roundedReset(resetAt: number): number {
 export function migrateNotificationState<T extends {resetIdentity: string}>(windows: Record<string, T>): Record<string, T> {
     const migrated: Record<string, T> = {};
     for (const [key, state] of Object.entries(windows)) {
+        // The file is our own but may be damaged; one bad entry must not stop the start.
+        if (typeof state?.resetIdentity !== 'string')
+            continue;
         if (!key.endsWith(LEGACY_SUFFIX)) {
             migrated[key] = state;
             continue;
@@ -111,7 +114,7 @@ function sourceTitle(tr: Translator, serviceLabel: string, accountName: string):
     return formatText(tr._('%s · %s'), serviceLabel, accountName);
 }
 
-function readingTitle(tr: Translator, window: Pick<UsageWindow, 'canonicalWindow' | 'label'>, consumed: number, mode: PanelPercentageMode): string {
+function readingTitle(tr: Translator, window: Pick<UsageWindow, 'id' | 'canonicalWindow' | 'label'>, consumed: number, mode: PanelPercentageMode): string {
     const {_} = tr;
     const clamped = Math.max(0, Math.min(1, consumed));
     const name = limitName(tr, window);
@@ -134,7 +137,7 @@ export function limitNotificationText(
     tr: Translator,
     serviceLabel: string,
     instance: Pick<ProviderInstance, 'displayName'>,
-    window: Pick<UsageWindow, 'canonicalWindow' | 'label' | 'resetAt'>,
+    window: Pick<UsageWindow, 'id' | 'canonicalWindow' | 'label' | 'resetAt'>,
     consumed: number,
     mode: PanelPercentageMode,
     now: number
@@ -171,7 +174,7 @@ export function testNotificationText(
 ): NotificationText {
     const {_} = tr;
     const window = shownLimits(instance, snapshot)[0] ?? orderedLimits(snapshot)[0] ?? null;
-    const preview = {canonicalWindow: providerMetadata(instance.kind).quotaWindows[0] ?? 'other', label: '', resetAt: null};
+    const preview = {id: '', canonicalWindow: providerMetadata(instance.kind).quotaWindows[0] ?? 'other', label: '', resetAt: null};
     const consumed = window?.percent ?? PREVIEW_CONSUMED;
     return {
         source: sourceTitle(tr, serviceLabel, instance.displayName),

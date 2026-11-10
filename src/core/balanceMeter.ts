@@ -1,8 +1,7 @@
 // A prepaid balance as a meter. The service reports only what is left, so the
 // amount after the most recent top-up counts as full: any rise in the balance is
 // a top-up, and spending never moves the full amount.
-import {BALANCE_KEY} from './topBar.js';
-import type {Balance, UsageWindow} from './types.js';
+import {BALANCE_KEY, type Balance, type UsageWindow} from './types.js';
 
 export interface BalanceReference {
     currency: string;

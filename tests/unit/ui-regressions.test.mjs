@@ -320,3 +320,18 @@ test('the diagnostics report is redacted again, saved privately, and closing the
     assert.match(store, /detail: redact\(entry\.detail, this\._home\)/);
     assert.match(runtime, /shell: Config\.PACKAGE_VERSION/);
 });
+
+// A plain lookup unlocks a locked match, which would show a password prompt during a background refresh.
+test('keyring reads search without unlocking, and locked items count as unavailable', async () => {
+    const source = await read('src/providers/keyring.ts');
+    assert.match(source, /service\.search\(schema, attributes, Secret\.SearchFlags\.LOAD_SECRETS, lookup\)/);
+    const code = source.replace(/\/\/.*$/gm, '');
+    assert.doesNotMatch(code, /SearchFlags\.UNLOCK|password_lookup\(|\.unlock\(/);
+    assert.match(source, /items\.find\(item => !item\.get_locked\(\)\)/);
+});
+
+test('settings changes refresh only the accounts whose reading changed, and rings stop at three', async () => {
+    const [runtime, topBar] = await Promise.all([read('src/runtime.ts'), read('src/shell/topBar.ts')]);
+    assert.match(runtime, /provider\.enabled && needsRefresh\(before\.get\(provider\.id\), provider\)/);
+    assert.match(topBar, /style === 'ring' && account\.limits\.length <= MAX_RINGS/);
+});

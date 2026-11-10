@@ -123,3 +123,27 @@ test('Codex model-specific limits are listed after the account limits', () => {
     });
     assert.deepEqual(result.windows.map(window => [window.canonicalWindow, window.label]), [['five-hour', 'Five-hour'], ['other', 'GPT-5.6 Sol']]);
 });
+
+// The top bar and alerts key a limit by its type, so a model's own 5-hour and
+// weekly windows must not take the keys of the plan's windows.
+test('Codex model limits stay separate from the plan limits, with stable ids', () => {
+    const window = (seconds, used) => ({used_percent: used, limit_window_seconds: seconds, reset_at: 1794200000});
+    const payload = extra => ({
+        rate_limit: {primary_window: window(18000, 10), secondary_window: window(604800, 20)},
+        additional_rate_limits: extra,
+    });
+    const both = normalizeCodexUsage(payload([
+        {limit_name: 'Spark', rate_limit: {primary_window: window(18000, 30), secondary_window: window(604800, 40)}},
+    ]));
+    assert.deepEqual(both.windows.map(item => [item.id, item.canonicalWindow, item.label]), [
+        ['five-hour-0', 'five-hour', 'Five-hour'],
+        ['weekly-1', 'weekly', 'Weekly'],
+        ['Spark:five-hour', 'other', 'Spark · Five-hour'],
+        ['Spark:weekly', 'other', 'Spark · Weekly'],
+    ]);
+    const reordered = normalizeCodexUsage(payload([
+        {limit_name: 'Other', rate_limit: {primary_window: window(86400, 5)}},
+        {limit_name: 'Spark', rate_limit: {primary_window: window(18000, 30), secondary_window: window(604800, 40)}},
+    ]));
+    assert.ok(reordered.windows.some(item => item.id === 'Spark:weekly'), 'a model limit keeps its id when the list changes');
+});

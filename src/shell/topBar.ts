@@ -20,6 +20,7 @@ const RINGS: Record<number, [number, number][]> = {
     2: [[7.6, 2], [4.3, 2]],
     3: [[8, 1.7], [5.4, 1.7], [2.9, 1.7]],
 };
+const MAX_RINGS = 3;
 const RING_SIZE = 19;
 const BAR_WIDTH = 5;
 const BAR_HEIGHT = 15;
@@ -146,8 +147,9 @@ function accountReading(account: TopBarAccount, style: PanelDisplayStyle, mode: 
     return box;
 }
 
+// More than three nested rings would be too thin to read, so such an account uses bars.
 function drawnReading(account: TopBarAccount, style: PanelDisplayStyle, mode: PanelPercentageMode): St.DrawingArea {
-    return style === 'ring' ? ringStack(account, mode) : barStack(account, mode);
+    return style === 'ring' && account.limits.length <= MAX_RINGS ? ringStack(account, mode) : barStack(account, mode);
 }
 
 function accountDescription(account: TopBarAccount, mode: PanelPercentageMode): string {

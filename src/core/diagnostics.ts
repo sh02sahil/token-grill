@@ -7,7 +7,7 @@ export interface DiagnosticEntry {
     account: string;
     kind: ProviderKind;
     app: AccountApp;
-    step: 'request' | 'response' | 'error';
+    step: 'sign-in' | 'request' | 'response' | 'error';
     detail: string;
 }
 

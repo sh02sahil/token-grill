@@ -208,12 +208,12 @@ export class AccountPage extends Adw.NavigationPage {
     }
 
     private _chooseAccent(accent: ProviderInstance['accent']): void {
-        for (const [color, button] of this._swatches)
-            button.active = color === accent;
-        // The custom button always shows the colour in use; its handler ignores this echo.
-        this._custom.rgba = rgbaFromHex(accentHex(accent));
         if (accent !== this._provider.accent)
             this._apply({accent});
+        for (const [color, button] of this._swatches)
+            button.active = color === accent;
+        // Stored first, so the custom button's handler sees this colour as current and ignores the echo.
+        this._custom.rgba = rgbaFromHex(accentHex(accent));
     }
 
     private _signedInRow(): Adw.ActionRow {
@@ -273,7 +273,8 @@ export class AccountPage extends Adw.NavigationPage {
         row.connect('apply', () => {
             const text = row.text.trim();
             const draft = {...this._provider, [field]: field === 'accountHome' ? text : text || null};
-            const others = readProviders(this._settings).filter(item => item.accountHome);
+            // Two apps can share a home, such as Claude Code and DeepSeek in ~/.claude.
+            const others = readProviders(this._settings).filter(item => item.accountHome && item.kind === this._provider.kind && item.app === this._provider.app);
             const {errors} = validateProviderDraft(draft, others, expandPath);
             markField(row, errors[field]);
             if (errors[field])

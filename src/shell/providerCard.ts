@@ -298,7 +298,7 @@ export class ProviderDetail extends PopupMenu.PopupMenuSection {
             return windows.map(window => ({key: limitKey(window), title: limitName(TRANSLATOR, window), window}));
         return providerMetadata(instance.kind).quotaWindows.map(canonicalWindow => ({
             key: canonicalWindow,
-            title: limitName(TRANSLATOR, {canonicalWindow, label: ''}),
+            title: limitName(TRANSLATOR, {id: canonicalWindow, canonicalWindow, label: ''}),
             window: null,
         }));
     }

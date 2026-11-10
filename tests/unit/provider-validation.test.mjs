@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import {firstProviderValidationError, validateProviderDraft} from '../../build/tests/provider-validation.mjs';
+import {validateProviderDraft} from '../../build/tests/provider-validation.mjs';
 
 const home = '/home/test';
 function canonicalize(value) {
@@ -26,7 +26,6 @@ const draft = overrides => ({
 test('a new provider with generated defaults and a unique home is valid', () => {
     const result = validateProviderDraft(draft(), [], canonicalize);
     assert.deepEqual(result, {valid: true, errors: {}});
-    assert.equal(firstProviderValidationError(result), null);
 });
 
 test('an empty display name marks only the display-name field', () => {

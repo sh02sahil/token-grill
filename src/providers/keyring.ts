@@ -27,13 +27,27 @@ export async function importSecret(texts: KeyringTexts): Promise<typeof Secret> 
     } catch {
         throw new CollectorError('dependency', texts.missingLibrary);
     }
-    Gio._promisify(module.default, 'password_lookup', 'password_lookup_finish');
+    Gio._promisify(module.default.Service.prototype, 'search', 'search_finish');
     return module.default;
+}
+
+// The typings give Service.get no promise form.
+function secretService(library: typeof Secret, cancellable: Gio.Cancellable): Promise<Secret.Service> {
+    return new Promise((resolve, reject) => {
+        library.Service.get(library.ServiceFlags.NONE, cancellable, (_source, result) => {
+            try {
+                resolve(library.Service.get_finish(result));
+            } catch (error) {
+                reject(error);
+            }
+        });
+    });
 }
 
 // Reads another app's keyring item. Never asks the keyring to unlock: a password
 // prompt during a background refresh would be hostile, so a locked keyring counts
-// as unavailable.
+// as unavailable. A plain lookup would unlock a locked match, so this searches
+// without SearchFlags.UNLOCK and reads only items that are already unlocked.
 export async function lookupSecret(
     schemaName: string,
     attributes: Record<string, string>,
@@ -63,8 +77,10 @@ export async function lookupSecret(
         removeTimeout();
         lookup.cancel();
     });
+    let items: Secret.Item[];
     try {
-        return await Secret.password_lookup(schema, attributes, lookup);
+        const service = await secretService(Secret, lookup);
+        items = await service.search(schema, attributes, Secret.SearchFlags.LOAD_SECRETS, lookup);
     } catch (error) {
         if (!timedOut && (isCancellation(error) || !(error instanceof GLib.Error)))
             throw error;
@@ -73,4 +89,8 @@ export async function lookupSecret(
         removeTimeout();
         cancellable.disconnect(parentId);
     }
+    const unlocked = items.find(item => !item.get_locked());
+    if (!unlocked && items.length)
+        throw new CollectorError('dependency', texts.unavailable);
+    return unlocked?.get_secret()?.get_text() ?? null;
 }

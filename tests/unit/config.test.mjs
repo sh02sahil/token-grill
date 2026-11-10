@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {CONFIGURATION_VERSION, ENTRY_SCHEMA_VERSION, migrateProviderSettings, newProvider, normalizeProvider, readProviders} from '../../build/tests/config.mjs';
+import {CONFIGURATION_VERSION, ENTRY_SCHEMA_VERSION, migrateProviderSettings, needsRefresh, newProvider, normalizeProvider, readProviders} from '../../build/tests/config.mjs';
 
 function fakeSettings(providers, version = CONFIGURATION_VERSION, activeId = '') {
     const values = {'provider-instances-json': JSON.stringify(providers), 'configuration-version': version, 'active-provider-id': activeId};
@@ -172,4 +172,22 @@ test('new accounts start on automatic', () => {
 test('a keyring account needs no home, other accounts do', () => {
     assert.equal(normalizeProvider(entry({kind: 'deepseek', app: 'keyring', accountHome: ''})).length, 1);
     assert.deepEqual(normalizeProvider(entry({kind: 'codex', app: 'codex-cli', accountHome: ''})), []);
+});
+
+// 0.3.x offered every limit in its editor and fell back to the most used one
+// when the service did not report it; pinning such a limit would show nothing.
+test('an upgraded limit the service never reports becomes automatic', () => {
+    const settings = fakeSettings([v031('a1', 'codex', 'monthly')], 2, 'a1');
+    migrateProviderSettings(settings);
+    assert.deepEqual(readProviders(settings)[0].topBar, {automatic: true, limits: []});
+});
+
+test('only changes to how an account is read start a refresh', () => {
+    const [base] = normalizeProvider(v031('a1', 'codex', 'weekly'));
+    assert.equal(needsRefresh(undefined, base), true, 'a new account');
+    for (const change of [{displayName: 'Renamed'}, {accent: 'red'}, {topBar: {automatic: true, limits: []}}, {lowBalance: 5}])
+        assert.equal(needsRefresh(base, {...base, ...change}), false, JSON.stringify(change));
+    for (const change of [{accountHome: '~/.codex2'}, {liveUsageEnabled: false}, {localHistoryEnabled: false}, {app: 'opencode'}, {authFileOverride: '/x'}])
+        assert.equal(needsRefresh(base, {...base, ...change}), true, JSON.stringify(change));
+    assert.equal(needsRefresh({...base, enabled: false}, base), true, 'turned back on');
 });

@@ -15,8 +15,8 @@ import {
 import type {NotificationText} from '../core/notificationPolicy.js';
 import {isRecord} from '../core/json.js';
 import {providerMetadata} from '../core/providerMetadata.js';
-import {BALANCE_KEY, isShown, limitKey, shownLimits} from '../core/topBar.js';
-import type {PanelPercentageMode, ProviderInstance, ProviderSnapshot, UsageWindow} from '../core/types.js';
+import {isShown, limitKey, shownLimits} from '../core/topBar.js';
+import {BALANCE_KEY, type PanelPercentageMode, type ProviderInstance, type ProviderSnapshot, type UsageWindow} from '../core/types.js';
 import {readJson, SerialWriter, statePath} from '../storage/atomicJson.js';
 import {providerGicon} from './accountChip.js';
 import {TRANSLATOR} from './translator.js';

@@ -3,7 +3,7 @@
 // publicly described `usage` block plus `limits[]` with counts (numbers may be strings).
 import {isRecord, recordAt, stringAt, toEpochMs} from '../../core/json.js';
 import type {CanonicalQuotaWindow, UsageWindow} from '../../core/types.js';
-import {windowLabel} from '../windows.js';
+import {claimType, windowLabel} from '../windows.js';
 
 const RATIO_WINDOWS: [string, CanonicalQuotaWindow, string][] = [
     ['limit_5h', 'five-hour', ''],
@@ -57,16 +57,19 @@ export function normalizeKimiUsage(payload: unknown): UsageWindow[] {
     if (byRatio.length)
         return byRatio;
     const windows: UsageWindow[] = [];
+    const claimed = new Set<CanonicalQuotaWindow>();
     const usage = recordAt(payload, 'usage');
     const weekly = usage ? countWindow('usage', 'weekly', '', usage) : null;
-    if (weekly)
+    if (weekly) {
+        claimed.add('weekly');
         windows.push(weekly);
+    }
     const limits = Array.isArray(payload.limits) ? payload.limits : [];
     limits.forEach((item, index) => {
         if (!isRecord(item))
             return;
-        const canonical = windowKind(recordAt(item, 'window'));
-        const window = countWindow(`limit-${index}`, canonical, stringAt(item, 'name') ?? 'Usage Limit', recordAt(item, 'detail') ?? item);
+        const type = claimType(claimed, windowKind(recordAt(item, 'window')), stringAt(item, 'name') ?? 'Usage Limit');
+        const window = countWindow(`limit-${index}`, type.canonicalWindow, type.label, recordAt(item, 'detail') ?? item);
         if (window)
             windows.push(window);
     });
