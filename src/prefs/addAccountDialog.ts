@@ -1,20 +1,17 @@
 import Adw from 'gi://Adw';
 import Gio from 'gi://Gio';
-import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import Gtk from 'gi://Gtk';
 
 import {gettext as _} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 import {newProvider} from '../core/config.js';
-import {CollectorError} from '../core/errors.js';
 import {isCancellation} from '../core/gio.js';
 import {formatText} from '../core/i18n.js';
 import type {AccountApp, ProviderInstance, ProviderKind} from '../core/types.js';
 import type {Candidate} from '../providers/candidates.js';
 import {CandidateList} from './candidateList.js';
-import {storeApiKey} from './keyStore.js';
+import {presentKeyError, storeApiKey} from './keyStore.js';
 import {findCandidates} from './sources.js';
-import {TRANSLATOR} from './translator.js';
 import {providerIcon, setAccessibleLabel} from './widgets.js';
 
 // What to run to sign in, shown when an app has no account to add. Commands are not translated.
@@ -30,8 +27,8 @@ const SIGN_IN_COMMANDS: Partial<Record<AccountApp, string>> = {
 function emptyHint(app: AccountApp): string {
     const command = SIGN_IN_COMMANDS[app];
     if (command)
-        return formatText(_('Sign in with %s, then try again.'), command);
-    return _('Sign in with the app, then try again.');
+        return formatText(_('Sign in with %s, then try again'), command);
+    return _('Sign in with the app, then try again');
 }
 
 // Starts from the app the user signs in with; every account lands in its own service.
@@ -93,7 +90,7 @@ export class AddAccountDialog extends Adw.Dialog {
     private _copilotPage(): Adw.NavigationPage {
         const group = new Adw.PreferencesGroup({
             title: _('Where Are You Signed In to GitHub?'),
-            description: _('Using Copilot in VS Code? VS Code keeps its sign-in private, so sign in once with one of these apps.'),
+            description: _('VS Code keeps its Copilot sign-in private, so sign in once with one of these apps'),
         });
         group.add(this._linkRow('Copilot CLI', 'copilot → /login', 'copilot', () => this._view.push(this._candidatesPage('Copilot CLI', 'copilot-cli'))));
         group.add(this._linkRow('GitHub CLI', 'gh auth login', 'copilot', () => this._view.push(this._candidatesPage('GitHub CLI', 'github-cli'))));
@@ -124,7 +121,6 @@ export class AddAccountDialog extends Adw.Dialog {
         return navigation;
     }
 
-    // Shows the found sign-ins and wires the header's Add button to them.
     private _candidateGroup(candidates: Candidate[], add: Gtk.Button, description: string): Adw.PreferencesGroup {
         const list = new CandidateList(candidates, this._configured, this._extensionPath, description);
         add.visible = list.addable > 0;
@@ -163,7 +159,7 @@ export class AddAccountDialog extends Adw.Dialog {
     private _pasteGroup(): Adw.PreferencesGroup {
         const group = new Adw.PreferencesGroup({
             title: _('Paste an API Key'),
-            description: _('Saved in the GNOME keyring, never in settings. Removed when you remove the account.'),
+            description: _('Kept in the GNOME keyring, never in settings, and removed with the account'),
         });
         const entry = new Adw.PasswordEntryRow({title: _('API Key')});
         const save = new Gtk.Button({label: _('Save to Keyring'), css_classes: ['suggested-action'], valign: Gtk.Align.CENTER, sensitive: false});
@@ -182,7 +178,7 @@ export class AddAccountDialog extends Adw.Dialog {
         // With no keyring running, D-Bus can take about 25 seconds to give up.
         save.sensitive = false;
         save.label = _('Saving…');
-        storeApiKey(provider.id, _('Token Grill: DeepSeek API key'), entry.text.trim(), this._cancellable).then(() => {
+        storeApiKey(provider.id, entry.text.trim(), this._cancellable).then(() => {
             this._onAdd([provider]);
             this.close();
         }).catch(error => {
@@ -190,18 +186,7 @@ export class AddAccountDialog extends Adw.Dialog {
                 return;
             save.sensitive = true;
             save.label = _('Save to Keyring');
-            if (error instanceof CollectorError)
-                this._showError(error.text(TRANSLATOR));
-            else if (error instanceof GLib.Error)
-                this._showError(_('The system keyring did not save the key.'));
-            else
-                logError(error, 'Token Grill');
+            presentKeyError(error, this);
         });
-    }
-
-    private _showError(body: string): void {
-        const alert = new Adw.AlertDialog({heading: _('Could Not Save the Key'), body});
-        alert.add_response('close', _('Close'));
-        alert.present(this);
     }
 }

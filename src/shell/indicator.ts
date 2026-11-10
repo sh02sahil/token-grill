@@ -9,6 +9,7 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {activeProvider} from '../core/display.js';
 import {accountGroups, type ChooserGroup} from '../core/popupModel.js';
+import {topBarGroups} from '../core/topBar.js';
 import type {
     PanelDisplayStyle,
     PanelPercentageMode,
@@ -17,7 +18,6 @@ import type {
     ProviderRuntimeState,
     ProviderSnapshot,
 } from '../core/types.js';
-import {topBarGroups} from '../core/topBar.js';
 import {accentDot, providerIcon} from './accountChip.js';
 import {InfoItem, ProviderDetail, StaticMenuItem} from './providerCard.js';
 import {createToggleGroup, type ToggleItem, type ToggleSegment} from './toggleGroup.js';
@@ -243,7 +243,7 @@ export class TokenGrillIndicator extends PanelMenu.Button {
         const refreshAll = new StayOpenMenuItem(_('Refresh All Accounts'), () => controller.refreshAll());
         menu.addMenuItem(refreshAll);
         const automatic = new PopupMenu.PopupSwitchMenuItem(_('Automatic Updates'), true);
-        automatic.connect('toggled', (_item, state) => controller.setPaused(!state));
+        automatic.connectObject('toggled', (_item: PopupMenu.PopupSwitchMenuItem, state: boolean) => controller.setPaused(!state), automatic);
         menu.addMenuItem(automatic);
         if (Main.sessionMode.allowSettings)
             menu.addAction(_('Preferences…'), () => controller.openPreferences());
@@ -296,7 +296,6 @@ export class TokenGrillIndicator extends PanelMenu.Button {
                 : _('Token Grill, no provider accounts configured'));
             return;
         }
-        this._entries.clear();
         for (const group of groups) {
             const entry = createTopBarEntry(this._extensionPath, group, state.style, state.mode);
             this._entries.set(group.kind, entry);
@@ -349,7 +348,7 @@ export class TokenGrillIndicator extends PanelMenu.Button {
             item.setOrnament(account.selected ? PopupMenu.Ornament.CHECK : PopupMenu.Ornament.NONE);
             if (account.attention)
                 item.add_child(attentionIcon());
-            item.connect('activate', () => this._controller!.selectProvider(account.id));
+            item.connectObject('activate', () => this._controller!.selectProvider(account.id), item);
             accountMenu.menu.addMenuItem(item);
         }
     }
@@ -357,11 +356,11 @@ export class TokenGrillIndicator extends PanelMenu.Button {
     override destroy(): void {
         (this.menu as PopupMenu.PopupMenu).disconnect(this._openStateId!);
         this._openStateId = null;
-        this._controller = null;
-        this._entries.clear();
         this._themeContext!.disconnect(this._themeChangedId!);
         this._themeChangedId = null;
         this._themeContext = null;
+        this._controller = null;
+        this._entries.clear();
         this._ui = null;
         super.destroy();
     }

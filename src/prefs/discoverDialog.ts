@@ -37,13 +37,13 @@ export class DiscoverDialog extends Adw.Dialog {
         this.set_child(toolbar);
 
         findAllCandidates(configured, this._cancellable).then(candidates => {
-            const list = new CandidateList(candidates, configured, extensionPath, _('Show in top bar? Untick what you don’t want there.'));
+            const list = new CandidateList(candidates, configured, extensionPath, _('Ticked accounts are added and shown in the top bar'));
             if (!list.addable) {
                 stack.add_named(new Adw.StatusPage({
                     title: _('No New Accounts Found'),
                     description: candidates.length
-                        ? _('Every account signed in on this computer is already in Token Grill.')
-                        : _('Sign in with one of the supported apps, then try again.'),
+                        ? _('Every account signed in on this computer is already in Token Grill')
+                        : _('Sign in with one of the supported apps, then try again'),
                     icon_name: 'system-search-symbolic',
                 }), 'empty');
                 stack.visible_child_name = 'empty';

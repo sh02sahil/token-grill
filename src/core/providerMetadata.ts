@@ -95,8 +95,6 @@ export const PROVIDER_METADATA: Record<ProviderKind, ProviderMetadata> = {
     },
 };
 
-export const PROVIDER_KINDS = Object.keys(PROVIDER_METADATA) as ProviderKind[];
-
 export function providerMetadata(kind: ProviderKind): ProviderMetadata {
     return PROVIDER_METADATA[kind];
 }

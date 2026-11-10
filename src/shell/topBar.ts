@@ -1,11 +1,11 @@
 // One top-bar entry per service: its icon, then each shown account's limits as
 // nested rings, thin bars or numbers, marked with the account's accent colour.
+import type Cairo from 'cairo';
 import Clutter from 'gi://Clutter';
 import St from 'gi://St';
-import type Cairo from 'cairo';
 
 import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
-import {accentHex} from '../core/accent.js';
+import {accentRgb} from '../core/accent.js';
 import {displayLabel, displayPercent, formatMoney, limitName} from '../core/display.js';
 import {formatText} from '../core/i18n.js';
 import {providerMetadata} from '../core/providerMetadata.js';
@@ -30,11 +30,6 @@ const TRACK_ALPHA = 0.28;
 
 type Rgb = [number, number, number];
 
-function hexRgb(hex: string): Rgb {
-    const value = Number.parseInt(hex.slice(1), 16);
-    return [(value >> 16 & 255) / 255, (value >> 8 & 255) / 255, (value & 255) / 255];
-}
-
 // Meters use the shell accent colour from the stylesheet (`.tokengrill-panel-meter`).
 function meterRgb(area: St.DrawingArea): Rgb {
     const color = area.get_theme_node().get_foreground_color();
@@ -49,11 +44,11 @@ function fillDot(cr: Cairo.Context, rgb: Rgb, x: number, y: number, radius: numb
 
 function drawingArea(width: number, height: number, draw: (area: St.DrawingArea, cr: Cairo.Context) => void): St.DrawingArea {
     const area = new St.DrawingArea({width, height, style_class: 'tokengrill-panel-meter', y_align: Clutter.ActorAlign.CENTER});
-    area.connect('repaint', () => {
+    area.connectObject('repaint', () => {
         const cr = area.get_context();
         draw(area, cr);
         cr.$dispose();
-    });
+    }, area);
     return area;
 }
 
@@ -74,7 +69,7 @@ function ringStack(account: TopBarAccount, mode: PanelPercentageMode): St.Drawin
             cr.arc(centre, centre, radius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * value);
             cr.stroke();
         });
-        const accent = hexRgb(accentHex(account.accent));
+        const accent = accentRgb(account.accent);
         if (dotBelow)
             fillDot(cr, accent, centre, RING_SIZE + GAP + DOT_SIZE / 2, DOT_SIZE / 2);
         else
@@ -108,7 +103,7 @@ function barStack(account: TopBarAccount, mode: PanelPercentageMode): St.Drawing
             cr.fill();
             cr.restore();
         });
-        fillDot(cr, hexRgb(accentHex(account.accent)), width / 2, BAR_HEIGHT + GAP + DOT_SIZE / 2, DOT_SIZE / 2);
+        fillDot(cr, accentRgb(account.accent), width / 2, BAR_HEIGHT + GAP + DOT_SIZE / 2, DOT_SIZE / 2);
     });
 }
 

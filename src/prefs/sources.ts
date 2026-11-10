@@ -9,16 +9,11 @@ import type {AccountApp, ProviderInstance} from '../core/types.js';
 import {duplicateOf, identityFromCodexAuth, identityFromOpenCode, type AccountIdentity} from '../providers/accountIdentity.js';
 import {byStatus, openCodeCandidates, type Candidate} from '../providers/candidates.js';
 import {readCredentialJson} from '../providers/credentials.js';
+import {copilotCliToken} from '../providers/copilot/auth.js';
 import {deepSeekKeyFromClaudeSettings} from '../providers/deepseek/normalize.js';
-import {lookupSecret, type KeyringTexts} from '../providers/keyring.js';
 import {readOpenCodeEntries} from '../providers/opencode/authFile.js';
 import type {OpenCodeEntry} from '../providers/opencode/entries.js';
 import {antigravityHomes, cliHomes, githubCliHomes, kimiHomes, kiroHomes} from './discovery.js';
-
-const KEYRING_TEXTS: KeyringTexts = {
-    missingLibrary: ({_}) => _('Copilot accounts need the libsecret library (gir1.2-secret-1).'),
-    unavailable: ({_}) => _('The system keyring is not available, so the GitHub sign-in cannot be read.'),
-};
 
 // A sign-in that cannot be read is simply not offered.
 async function readOrNull<T>(read: () => Promise<T>): Promise<T | null> {
@@ -106,7 +101,7 @@ async function claudeSettingsCandidates(configured: ProviderInstance[], cancella
 }
 
 async function copilotCliCandidates(configured: ProviderInstance[], cancellable: Gio.Cancellable): Promise<Candidate[]> {
-    const token = await readOrNull(() => lookupSecret('org.freedesktop.Secret.Generic', {service: 'copilot-cli'}, cancellable, KEYRING_TEXTS));
+    const token = await readOrNull(() => copilotCliToken(cancellable));
     if (!token)
         return [];
     const added = configured.some(item => item.app === 'copilot-cli');

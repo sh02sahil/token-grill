@@ -1,6 +1,6 @@
-// Kimi Code's usage endpoint is undocumented. Two layouts are accepted until an
-// alpha tester's report settles it: `usages.limit_*` with used ratios, and the
-// publicly described `usage` block plus `limits[]` with counts (numbers may be strings).
+// Kimi Code's usage endpoint is undocumented and public descriptions of it
+// disagree, so both layouts are read: `usages.limit_*` with used ratios, and a
+// `usage` block plus `limits[]` with counts (numbers may be strings).
 import {isRecord, recordAt, stringAt, toEpochMs} from '../../core/json.js';
 import type {CanonicalQuotaWindow, UsageWindow} from '../../core/types.js';
 import {claimType, windowLabel} from '../windows.js';

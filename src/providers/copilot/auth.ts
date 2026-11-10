@@ -27,7 +27,7 @@ async function githubCliToken(instance: ProviderInstance, cancellable: Gio.Cance
     return token;
 }
 
-async function copilotCliToken(cancellable: Gio.Cancellable): Promise<string> {
+export async function copilotCliToken(cancellable: Gio.Cancellable): Promise<string> {
     const token = await lookupSecret(GENERIC_SCHEMA, {service: 'copilot-cli'}, cancellable, KEYRING_TEXTS);
     if (!token)
         throw new CollectorError('auth-missing', ({_}) => _('The Copilot CLI is not signed in.'));

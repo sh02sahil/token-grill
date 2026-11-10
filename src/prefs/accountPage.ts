@@ -1,14 +1,12 @@
 import Adw from 'gi://Adw';
 import Gdk from 'gi://Gdk';
 import Gio from 'gi://Gio';
-import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import Gtk from 'gi://Gtk';
 
 import {gettext as _} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 import {accentHex, normalizeAccent} from '../core/accent.js';
 import {readProviders} from '../core/config.js';
-import {CollectorError} from '../core/errors.js';
 import {isCancellation} from '../core/gio.js';
 import {formatText} from '../core/i18n.js';
 import {displayPath, expandPath} from '../core/paths.js';
@@ -16,7 +14,7 @@ import {providerMetadata} from '../core/providerMetadata.js';
 import {topBarSummary} from '../core/topBar.js';
 import {ACCENTS, type AccentColor, type AccountApp, type ProviderInstance} from '../core/types.js';
 import {credentialLabel, credentialState} from './credentialStatus.js';
-import {clearApiKey, storeApiKey} from './keyStore.js';
+import {clearApiKey, presentKeyError, storeApiKey} from './keyStore.js';
 import {validateProviderDraft, type ProviderValidationCode} from './providerValidation.js';
 import {TRANSLATOR} from './translator.js';
 import {accentName, setAccessibleLabel} from './widgets.js';
@@ -109,16 +107,13 @@ export class AccountPage extends Adw.NavigationPage {
         name.connect('apply', () => this._rename(name));
         main.add(name);
 
-        const colour = new Adw.ActionRow({title: _('Colour')});
         this._custom = new Gtk.ColorDialogButton({
-            dialog: new Gtk.ColorDialog({title: _('Custom Colour'), with_alpha: false}),
+            dialog: new Gtk.ColorDialog({title: _('Custom Color'), with_alpha: false}),
             rgba: rgbaFromHex(accentHex(provider.accent)),
             valign: Gtk.Align.CENTER,
-            tooltip_text: _('Custom Colour'),
+            tooltip_text: _('Custom Color'),
         });
-        setAccessibleLabel(this._custom, _('Custom Colour'));
-        colour.add_suffix(this._buildSwatches());
-        main.add(colour);
+        setAccessibleLabel(this._custom, _('Custom Color'));
 
         main.add(this._signedInRow());
         this._topBar = new Adw.ActionRow({title: _('Top Bar'), subtitle: this._topBarText()});
@@ -135,6 +130,10 @@ export class AccountPage extends Adw.NavigationPage {
             main.add(history);
         }
         page.add(main);
+
+        const colors = new Adw.PreferencesGroup({title: _('Color')});
+        colors.add(this._buildSwatches());
+        page.add(colors);
 
         const more = new Adw.PreferencesGroup();
         more.add(this._moreOptions());
@@ -184,7 +183,7 @@ export class AccountPage extends Adw.NavigationPage {
     }
 
     private _buildSwatches(): Gtk.Box {
-        const box = new Gtk.Box({spacing: 4, valign: Gtk.Align.CENTER});
+        const box = new Gtk.Box({spacing: 4, margin_top: 8, margin_bottom: 8, halign: Gtk.Align.START});
         for (const color of ACCENTS) {
             const label = accentName(color);
             const button = new Gtk.ToggleButton({
@@ -290,26 +289,13 @@ export class AccountPage extends Adw.NavigationPage {
             const key = row.text.trim();
             if (!key)
                 return;
-            storeApiKey(this._provider.id, _('Token Grill: DeepSeek API key'), key, this._cancellable).then(() => {
+            storeApiKey(this._provider.id, key, this._cancellable).then(() => {
                 row.text = '';
             }).catch(error => {
-                if (isCancellation(error))
-                    return;
-                if (error instanceof CollectorError)
-                    this._showKeyError(error.text(TRANSLATOR));
-                else if (error instanceof GLib.Error)
-                    this._showKeyError(_('The system keyring did not save the key.'));
-                else
-                    logError(error, 'Token Grill');
+                presentKeyError(error, this);
             });
         });
         return row;
-    }
-
-    private _showKeyError(body: string): void {
-        const alert = new Adw.AlertDialog({heading: _('Could Not Save the Key'), body});
-        alert.add_response('close', _('Close'));
-        alert.present(this);
     }
 
     private _removal(): Adw.PreferencesGroup {

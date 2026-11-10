@@ -3,6 +3,7 @@ import type Gio from 'gi://Gio';
 import type {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
+import {isRecord} from '../core/json.js';
 import {
     balanceNotificationText,
     checkMilestone,
@@ -13,7 +14,6 @@ import {
     testNotificationText,
 } from '../core/notificationPolicy.js';
 import type {NotificationText} from '../core/notificationPolicy.js';
-import {isRecord} from '../core/json.js';
 import {providerMetadata} from '../core/providerMetadata.js';
 import {isShown, limitKey, shownLimits} from '../core/topBar.js';
 import {BALANCE_KEY, type PanelPercentageMode, type ProviderInstance, type ProviderSnapshot, type UsageWindow} from '../core/types.js';
@@ -38,7 +38,6 @@ interface NotificationState {
 function emptyState(): NotificationState {
     return {schemaVersion: 2, windows: {}, lowBalance: {}};
 }
-
 
 // One message-tray source per account, so each alert carries the account's name and icon.
 export class NotificationStore {

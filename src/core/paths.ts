@@ -96,7 +96,7 @@ export function authFileCandidates(instance: ProviderInstance): string[] {
     return ANTIGRAVITY_AUTH_FILES.map(name => GLib.build_filenamev([home, name]));
 }
 
-// Preferences process only: a small, user-triggered synchronous check (PR-9).
+// Preferences process only: a small, user-triggered synchronous check.
 export function pathExists(path: string): boolean {
     return Gio.File.new_for_path(path).query_exists(null);
 }

@@ -117,7 +117,7 @@ class IdentityItem extends StaticMenuItem {
             child: new St.Icon({icon_name: 'view-refresh-symbolic'}),
             accessible_name: _('Refresh This Account'),
         });
-        this._refreshButton.connect('clicked', () => onRefresh());
+        this._refreshButton.connectObject('clicked', () => onRefresh(), this._refreshButton);
         this.add_child(this._refreshButton);
     }
 
@@ -277,7 +277,8 @@ export class ProviderDetail extends PopupMenu.PopupMenuSection {
         this._legend = new InfoItem();
         this._balance = new InfoItem();
         this._automatic = new PopupMenu.PopupSwitchMenuItem(_('Pick Automatically'), false);
-        this._automatic.connect('toggled', (_item, state) => this._withInstance(instance => this._actions.setAutomatic(instance, state)));
+        this._automatic.connectObject('toggled', (_item: PopupMenu.PopupSwitchMenuItem, state: boolean) =>
+            this._withInstance(instance => this._actions.setAutomatic(instance, state)), this._automatic);
         this._credits = new PopupMenu.PopupSubMenuMenuItem(_('Reset Credits'), false);
         this._creditsNone = new InfoItem();
         this._history = new InfoItem();

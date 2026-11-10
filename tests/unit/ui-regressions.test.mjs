@@ -10,7 +10,7 @@ test('provider marks use fixed geometry and drawn accent dots', async () => {
     assert.match(source, /new Clutter\.FixedLayout\(\)/);
     assert.match(source, /y_align: Clutter\.ActorAlign\.CENTER/);
     assert.match(source, /const MARK_DOT_SIZE = 6/);
-    assert.match(source, /accentHex\(instance\.accent\)/);
+    assert.match(source, /accentRgb\(instance\.accent\)/);
     assert.match(source, /new St\.DrawingArea\(/);
     assert.match(source, /cr\.\$dispose\(\)/);
     assert.doesNotMatch(source, /set_style\(|style: `/);
@@ -244,9 +244,13 @@ test('UI signals are disconnected and owned actors are released', async () => {
         read('src/shell/indicator.ts'),
     ]);
     // Child actors are destroyed with their parent, so only long-lived emitters are disconnected.
-    assert.match(dashboard, /this\._refreshButton\.connect\('clicked', \(\) => onRefresh\(\)\)/);
+    assert.match(dashboard, /this\._refreshButton\.connectObject\('clicked', \(\) => onRefresh\(\), this\._refreshButton\)/);
     assert.match(indicator, /this\._box\.destroy_all_children\(\)/);
-    assert.match(indicator, /this\._themeContext!\.disconnect\(this\._themeChangedId!\);\s*this\._themeChangedId = null;\s*this\._themeContext = null;\s*this\._ui = null;\s*super\.destroy\(\)/);
+    assert.match(indicator, new RegExp([
+        String.raw`this\._themeContext!\.disconnect\(this\._themeChangedId!\);\s*this\._themeChangedId = null;`,
+        String.raw`this\._themeContext = null;\s*this\._controller = null;\s*this\._entries\.clear\(\);`,
+        String.raw`this\._ui = null;\s*super\.destroy\(\)`,
+    ].join(String.raw`\s*`)));
     assert.doesNotMatch(indicator, /resetShellCursor/);
     assert.match(indicator, /\.disconnect\(this\._openStateId!\);\s*this\._openStateId = null;/);
 });

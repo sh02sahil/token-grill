@@ -11,7 +11,7 @@ import type {AccountApp, ProviderInstance, ProviderKind, QuotaWindowPreference, 
 export const CONFIGURATION_VERSION = 3;
 export const ENTRY_SCHEMA_VERSION = 2;
 const MAX_LIMIT_KEY_LENGTH = 64;
-export const QUOTA_WINDOW_PREFERENCES: QuotaWindowPreference[] = ['automatic', 'five-hour', 'weekly', 'monthly'];
+const QUOTA_WINDOW_PREFERENCES: QuotaWindowPreference[] = ['automatic', 'five-hour', 'weekly', 'monthly'];
 
 function parseStoredProviders(settings: Gio.Settings): unknown[] {
     try {

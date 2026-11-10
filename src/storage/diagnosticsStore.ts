@@ -6,7 +6,7 @@ import {readJson, SerialWriter, statePath, type WarningLogger} from './atomicJso
 
 const MAX_ENTRIES = 200;
 
-export const DIAGNOSTICS_FILE = 'diagnostics-v1.json';
+const DIAGNOSTICS_FILE = 'diagnostics-v1.json';
 
 // The versions are written by the Shell, which knows its own version; the preferences only read them.
 export type DiagnosticsAbout = Omit<ReportHeader, 'date'>;

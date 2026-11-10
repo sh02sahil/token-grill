@@ -1,6 +1,6 @@
 // OpenCode Go reports one pool for the whole subscription, whatever model is used.
 // Fields from the community-observed response: {rolling|weekly|monthly: {status, percent, resetsAt}},
-// optionally wrapped in `usage`. To be confirmed by alpha testers' diagnostics.
+// optionally wrapped in `usage`.
 import {isRecord, numberAt, recordAt, stringAt, toEpochMs} from '../../core/json.js';
 import type {CanonicalQuotaWindow, UsageWindow} from '../../core/types.js';
 import {windowLabel} from '../windows.js';

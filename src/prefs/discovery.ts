@@ -11,7 +11,7 @@ function hasCredentials(provider: ProviderInstance): boolean {
 }
 
 // Directories in the home folder whose names start with the prefix, such as ~/.codex-work.
-export function prefixedDirectories(prefix: string): string[] {
+function prefixedDirectories(prefix: string): string[] {
     const home = Gio.File.new_for_path(GLib.get_home_dir());
     const enumerator = home.enumerate_children('standard::name,standard::type', Gio.FileQueryInfoFlags.NONE, null);
     const names: string[] = [];

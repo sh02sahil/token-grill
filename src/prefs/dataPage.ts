@@ -55,8 +55,8 @@ export class DataPage extends Adw.PreferencesPage {
 
         const diagnostics = new Adw.PreferencesGroup({
             title: _('Diagnostics'),
-            description: _('The latest refresh steps, for a bug report. Tokens, keys, e-mail addresses, account names and your home folder ' +
-                'are removed; responses show only their field names and types.'),
+            description: _('Recent refresh steps for a bug report, without tokens, keys, e-mail addresses, account names or your home folder; ' +
+                'responses keep only their field names and types'),
         });
         const save = new Adw.ButtonRow({title: _('Save Diagnostics Report…'), start_icon_name: 'document-save-symbolic'});
         save.connect('activated', () => {

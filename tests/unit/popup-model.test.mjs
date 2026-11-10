@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {ACCENT_COLORS, accentHex, normalizeAccent} from '../../build/tests/accent.mjs';
+import {ACCENT_COLORS, accentHex, accentRgb, normalizeAccent} from '../../build/tests/accent.mjs';
 import {UNTRANSLATED} from '../../build/tests/i18n.mjs';
 import {accountGroups, errorText, historySummary, refreshStatusText, shortAccountName, windowCaption} from '../../build/tests/popup-model.mjs';
 
@@ -115,4 +115,9 @@ test('OpenCode accounts are told to open OpenCode', () => {
     const snapshot = {error: 'The OpenCode sign-in has expired.', errorInfo: {code: 'auth-expired', message: '', recovery: 'reauthenticate'}};
     assert.equal(errorText(UNTRANSLATED, snapshot, {kind: 'codex', app: 'opencode'}), 'The OpenCode sign-in has expired. Open OpenCode and sign in again.');
     assert.equal(errorText(UNTRANSLATED, snapshot, {kind: 'codex', app: 'codex-cli'}), 'The OpenCode sign-in has expired. Run codex login.');
+});
+
+test('accentRgb returns the colour channels as fractions', () => {
+    assert.deepEqual(accentRgb('#ff8000'), [1, 128 / 255, 0]);
+    assert.deepEqual(accentRgb('blue'), accentRgb('#3584e4'));
 });

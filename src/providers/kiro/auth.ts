@@ -1,6 +1,6 @@
+import type Gda from 'gi://Gda?version=5.0';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
-import type Gda from 'gi://Gda?version=5.0';
 
 import {CollectorError} from '../../core/errors.js';
 import {isIoError} from '../../core/gio.js';

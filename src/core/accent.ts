@@ -38,4 +38,7 @@ export function accentHex(accent: AccentValue): string {
     return isPaletteName(accent) ? ACCENT_COLORS[accent] : accent;
 }
 
-// Custom colours have no style class; they are drawn from accentHex().
+export function accentRgb(accent: AccentValue): [number, number, number] {
+    const value = Number.parseInt(accentHex(accent).slice(1), 16);
+    return [(value >> 16 & 255) / 255, (value >> 8 & 255) / 255, (value & 255) / 255];
+}

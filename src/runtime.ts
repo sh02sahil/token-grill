@@ -9,9 +9,9 @@ import {migrateProviderSettings, needsRefresh, readProviders, writeProviders} fr
 import {accountLabel, requestDetail, shapeOf, type DiagnosticEntry} from './core/diagnostics.js';
 import {activeProvider} from './core/display.js';
 import {CollectorError} from './core/errors.js';
-import {providerPaths} from './core/paths.js';
 import {isCancellation} from './core/gio.js';
 import {parseTestNotificationRequest} from './core/notificationPolicy.js';
+import {providerPaths} from './core/paths.js';
 import {Scheduler, type SchedulerJob} from './core/scheduler.js';
 import {snapshotFingerprint} from './core/snapshotFingerprint.js';
 import {isShown, setAutomatic, toggleLimit} from './core/topBar.js';
@@ -388,7 +388,8 @@ export class Runtime implements IndicatorController {
         cancellable: Gio.Cancellable,
         request: () => Promise<unknown>
     ): Promise<unknown> {
-        this._record(provider, 'request', requestDetail(method, url));
+        if (!cancellable.is_cancelled())
+            this._record(provider, 'request', requestDetail(method, url));
         try {
             const body = await request();
             if (!cancellable.is_cancelled())
