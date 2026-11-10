@@ -339,3 +339,11 @@ test('settings changes refresh only the accounts whose reading changed, and ring
     assert.match(runtime, /provider\.enabled && needsRefresh\(before\.get\(provider\.id\), provider\)/);
     assert.match(topBar, /style === 'ring' && account\.limits\.length <= MAX_RINGS/);
 });
+
+test('a low balance is announced, not only shown as an icon', async () => {
+    const source = await read('src/shell/topBar.ts');
+    assert.match(source, /_\('balance low'\)/);
+    assert.match(source, /function accountDescription\([\s\S]*?\n\}/);
+    const body = source.match(/function accountDescription\([\s\S]*?\n\}/)[0];
+    assert.match(body, /account\.low/);
+});
