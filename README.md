@@ -3,8 +3,7 @@
 Token Grill shows the usage limits of your AI accounts in the GNOME top bar.
 
 Token Grill monitors more than one account at the same time. From the top bar,
-you can see the remaining usage, select a different account, and see the reset
-times.
+you can see the remaining usage of each account and the reset times.
 
 ![Token Grill open on the GNOME desktop](docs/screenshots/usage-dashboard.png)
 
@@ -12,20 +11,22 @@ times.
 
 These are the functions of the top bar and the popup:
 
-- Token Grill monitors Codex, Claude, Kiro, and Antigravity accounts. You can
-  add more than one account for each service.
-- The top bar shows the active account as text, as a ring, or as a bar.
+- Token Grill monitors Codex, Claude, Kiro, Antigravity, GitHub Copilot,
+  OpenCode Go, and Kimi Code accounts, and the DeepSeek balance. You can add
+  more than one account for each service.
+- The top bar shows one entry for each service. Each entry shows the limits
+  that you checked for each account, as text, as rings, or as bars.
 - The popup shows the limits of each account and their reset times in your
-  local time zone.
-- You can select a different account in the popup.
+  local time zone. To show a limit in the top bar, check it in the popup.
 - If a refresh gets an error, the popup keeps the last good values and shows
   the error.
 
 These are the other functions:
 
-- Token Grill can send a notification when the usage of an account becomes
-  more than a usage step.
-  The notification shows the percentage, the account, the limit, and the step.
+- Token Grill can send a notification when the usage of a limit becomes more
+  than a usage step. Only the limits that the top bar shows send notifications.
+  The notification shows the service, the account, the limit, the percentage,
+  and the reset time.
 - For Codex and Claude accounts, Token Grill can read the local session
   history. It keeps only token totals. It does not keep prompts or responses.
 - For Codex accounts, the popup shows the number of available reset credits.
@@ -55,29 +56,48 @@ To install a release archive before the approval, do these steps:
 
 ## Add an account
 
-1. Sign in to the service with the CLI of that service. Token Grill does not
+1. Sign in to the service with the app of that service. Token Grill does not
    sign in for you.
 2. Open the preferences of Token Grill.
-3. Go to the **Providers** page.
-4. To find the accounts on this computer, select **Discover…**. To type the
-   home directory of an account, select **Add Account…**.
-5. Select the account for the top bar.
-6. Select if Token Grill can read the local history of the account.
+3. Go to the **Accounts** page.
+4. Select **Add Account…**, and then select the app that you sign in with.
+   Token Grill shows the signed-in accounts of that app.
+5. Check the accounts to add, and then select **Add**.
 
-These are the usual home directories: `~/.codex`, `~/.claude`,
-`$XDG_DATA_HOME/kiro-cli`, and `~/.gemini/antigravity-cli`. Each home directory
-is a different account. For example, `~/.codex` and `~/.codex2` are two Codex
-accounts.
+To find the accounts of all the supported apps, select **Discover…**. Token
+Grill adds the accounts that you check and shows them in the top bar.
+
+These are the apps that Token Grill reads:
+
+| Service        | Apps                                                     |
+| -------------- | -------------------------------------------------------- |
+| Codex          | Codex CLI, OpenCode                                      |
+| Claude         | Claude Code, OpenCode                                    |
+| Kiro           | Kiro CLI                                                 |
+| Antigravity    | Antigravity, Antigravity CLI                             |
+| GitHub Copilot | GitHub CLI, Copilot CLI, OpenCode                        |
+| OpenCode Go    | OpenCode                                                 |
+| DeepSeek       | OpenCode, Claude Code settings, or a key that you paste  |
+| Kimi Code      | Kimi CLI, OpenCode                                       |
+
+Each home directory is a different account. For example, `~/.codex` and
+`~/.codex2` are two Codex accounts. Token Grill does not read the Copilot
+sign-in of VS Code, because VS Code encrypts it.
+
+To select a name, a color, or the local history of an account, select the
+account on the **Accounts** page.
 
 ## Optional system libraries
 
-Two services must have a GObject introspection library from your Linux
+Some services must have a GObject introspection library from your Linux
 distribution:
 
-| Service                           | Library                          | Debian or Ubuntu package |
-| --------------------------------- | -------------------------------- | ------------------------ |
-| Kiro                              | Gda 5.0 with the SQLite provider | `gir1.2-gda-5.0`         |
-| Antigravity CLI (keyring sign-in) | libsecret 1                      | `gir1.2-secret-1`        |
+| Service                                       | Library                          | Debian or Ubuntu package |
+| --------------------------------------------- | -------------------------------- | ------------------------ |
+| Kiro                                          | Gda 5.0 with the SQLite provider | `gir1.2-gda-5.0`         |
+| Antigravity CLI (keyring sign-in)             | libsecret 1                      | `gir1.2-secret-1`        |
+| GitHub Copilot (keyring sign-in)              | libsecret 1                      | `gir1.2-secret-1`        |
+| DeepSeek (a key that you paste)               | libsecret 1                      | `gir1.2-secret-1`        |
 
 Token Grill loads a library with a dynamic `import()` only when an account
 uses it. If a library is missing, only that account shows an error. All other
@@ -112,7 +132,7 @@ Each request obeys these limits:
 Each request uses this User-Agent:
 
 ```text
-TokenGrill (+https://github.com/sh02sahil/token-grill; usage monitor for Codex, Claude, Kiro and Antigravity)
+TokenGrill (+https://github.com/sh02sahil/token-grill; usage monitor for Codex, Claude, Kiro, Antigravity, Copilot, OpenCode Go, DeepSeek and Kimi Code)
 ```
 
 The Antigravity quota service gives data only when the User-Agent contains
@@ -154,6 +174,21 @@ If Token Grill cannot use an Antigravity credential file, it reads the Secret
 Service item of the Antigravity CLI (`service=gemini`, `username=antigravity`).
 Token Grill does not unlock a locked keyring.
 
+For the new services, Token Grill reads these files and keyring items:
+
+- OpenCode: `$XDG_DATA_HOME/opencode/auth.json`. Token Grill does not refresh
+  an OpenCode sign-in. If the sign-in is expired, open OpenCode and sign in
+  again.
+- GitHub CLI: `~/.config/gh/hosts.yml`, and the keyring item of the GitHub CLI
+  (`service=gh:github.com`).
+- Copilot CLI: the keyring item of the Copilot CLI (`service=copilot-cli`).
+- Kimi CLI: `~/.kimi-code/credentials/kimi-code.json` and
+  `~/.kimi-code/config.toml`.
+- DeepSeek: the `env` of Claude Code `settings.json`, when Claude Code uses
+  DeepSeek. A key that you paste is in the GNOME keyring, in an item of Token
+  Grill (`org.gnome.shell.extensions.tokengrill.ApiKey`). When you remove the
+  account, Token Grill removes the item.
+
 If a Kiro or Antigravity access token is expired, Token Grill gets a new token.
 It keeps the new token only in memory. It does not write the token to the files
 or the keyring of the service.
@@ -161,11 +196,34 @@ or the keyring of the service.
 ### Files of Token Grill
 
 - `$XDG_DATA_HOME/token-grill/` contains the usage totals.
-- `$XDG_STATE_HOME/token-grill/` contains the history checkpoints and the
-  notification state.
+- `$XDG_STATE_HOME/token-grill/` contains the history checkpoints, the
+  notification state, the full DeepSeek balance after each top-up, and the
+  diagnostics.
+
+The diagnostics contain the latest 200 refresh steps: the host and path of each
+request, the field names and types of each response, and the error codes.
+Token Grill removes tokens, keys, e-mail addresses, and your home folder before
+it writes a step.
 
 These files do not contain credentials, service responses, prompts, or
 responses.
+
+### Diagnostics for testers
+
+To save a report for a bug report, open the **Data** page in the preferences
+and select **Save Diagnostics Report…**. The report does not contain tokens,
+keys, e-mail addresses, account names, or your home folder.
+
+To see each refresh step in the system journal, set the `diagnostics-journal`
+setting:
+
+```sh
+gsettings --schemadir ~/.local/share/gnome-shell/extensions/tokengrill@sh02sahil.github.io/schemas \
+    set org.gnome.shell.extensions.tokengrill diagnostics-journal true
+journalctl -f -o cat /usr/bin/gnome-shell | grep 'Token Grill'
+```
+
+To stop the journal messages, set the setting to `false`.
 
 ## Test a development build
 
@@ -215,8 +273,9 @@ functions:
 I did not find an extension with all these functions. Thus, I made this
 extension, and I share it.
 
-The first release monitors Codex, Claude, Kiro, and Antigravity, because I use
-these services. Token Grill can monitor more services in the future, if they
+The first release monitored Codex, Claude, Kiro, and Antigravity, because I use
+these services. Version 0.4.0 adds GitHub Copilot, OpenCode Go, DeepSeek, and
+Kimi Code. Token Grill can monitor more services in the future, if they
 do not decrease the privacy or the reliability of the extension.
 
 ## AI development declaration
@@ -236,7 +295,8 @@ and explaining the code.
 - **Kiro database unreadable:** Install the Gda 5.0 SQLite library. Then close
   the preferences window and open it again.
 - **System keyring or libsecret 1 unavailable:** Install the libsecret 1
-  library, or sign in to Antigravity with a credential file.
+  library. Then unlock the keyring. Token Grill does not unlock the keyring.
+- **OpenCode sign-in expired:** Open OpenCode and sign in again.
 - **Antigravity CLI sign-in expired:** Run an `agy` command. The Antigravity CLI
   then gets a new token.
 - **No history:** Enable local history for the account. Make sure that the

@@ -59,7 +59,7 @@
         <key name="diagnostics-journal" type="b">
             <default>false</default>
             <summary>Copy diagnostics to the system journal</summary>
-            <description>For testers: also write each redacted refresh step to the journal as a debug message.</description>
+            <description>For testers: also write each redacted refresh step to the system journal.</description>
         </key>
         <key name="panel-display-style" type="s">
             <choices>

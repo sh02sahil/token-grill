@@ -22,7 +22,8 @@ if (metadata['settings-schema'] !== 'org.gnome.shell.extensions.tokengrill')
 // PRACTICES 3.2: letters, numbers, space and period, 1 to 16 characters.
 if (!/^(?!^[. ]+$)[a-zA-Z0-9 .]{1,16}$/.test(metadata['version-name'] ?? ''))
     errors.push('version-name is missing or is not a valid EGO version name.');
-if (metadata['version-name'] !== packageJson.version)
+// EGO allows no hyphen, so the alpha 0.4.0-alpha.1 is named "0.4.0 alpha.1".
+if (metadata['version-name'] !== packageJson.version.replace('-', ' '))
     errors.push(`version-name ${metadata['version-name']} does not agree with package.json ${packageJson.version}.`);
 for (const key of Object.keys(metadata)) {
     if (!allowedMetadataKeys.has(key))
