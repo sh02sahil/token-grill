@@ -53,6 +53,7 @@ const MODULES = [
     ['src/prefs/providerValidation.ts', 'provider-validation.mjs'],
     ['src/pricing/calculator.ts', 'pricing-calculator.mjs'],
     ['src/providers/accountIdentity.ts', 'account-identity.mjs'],
+    ['src/providers/candidates.ts', 'account-candidates.mjs'],
     ['src/providers/antigravity/endpoints.ts', 'antigravity-endpoints.mjs'],
     ['src/providers/antigravity/keyringPayload.ts', 'antigravity-keyring-payload.mjs'],
     ['src/providers/antigravity/normalize.ts', 'antigravity-normalize.mjs'],

@@ -6,9 +6,8 @@ import type Cairo from 'cairo';
 
 import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
 import {accentHex} from '../core/accent.js';
-import {displayLabel, displayPercent, formatMoney} from '../core/display.js';
+import {displayLabel, displayPercent, formatMoney, limitName} from '../core/display.js';
 import {formatText} from '../core/i18n.js';
-import {limitName} from '../core/notificationPolicy.js';
 import {providerMetadata} from '../core/providerMetadata.js';
 import type {TopBarAccount, TopBarGroup} from '../core/topBar.js';
 import type {PanelDisplayStyle, PanelPercentageMode} from '../core/types.js';

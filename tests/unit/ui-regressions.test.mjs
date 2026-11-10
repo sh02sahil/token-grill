@@ -98,7 +98,7 @@ test('refresh progress uses the native shell spinner and UI uses centralized pac
 });
 
 test('Kiro details are monthly-only and show precise credits', async () => {
-    const [dashboard, model, names] = await Promise.all([read('src/shell/providerCard.ts'), read('src/core/popupModel.ts'), read('src/core/notificationPolicy.ts')]);
+    const [dashboard, model, names] = await Promise.all([read('src/shell/providerCard.ts'), read('src/core/popupModel.ts'), read('src/core/display.ts')]);
     assert.match(names, /return _\('Monthly'\)/);
     // Before the first reading, rows come from the limits the service is known to have.
     assert.match(dashboard, /providerMetadata\(instance\.kind\)\.quotaWindows\.map/);
@@ -168,15 +168,19 @@ test('notifications use per-account sources with symbolic icons and lifecycle cl
 
 test('provider preferences use direct editing, confirmed deletion, and normalized reorder controls', async () => {
     const [page, editor, reorder, general] = await Promise.all([
-        read('src/prefs/providersPage.ts'),
+        read('src/prefs/accountsPage.ts'),
         read('src/prefs/providerEditorDialog.ts'),
         read('src/prefs/reorderDialog.ts'),
         read('src/prefs/generalPage.ts'),
     ]);
-    assert.match(page, /icon_name: 'document-edit-symbolic'/);
-    assert.match(page, /formatText\(_\('Edit %s'\), provider\.displayName\)/);
+    // Each account row opens its page; the row itself is the keyboard target.
+    assert.match(page, /activatable: true/);
+    assert.match(page, /row\.connect\('activated', \(\) => this\._edit\(provider\)\)/);
+    assert.match(page, /icon_name: 'go-next-symbolic'/);
+    assert.match(page, /setAccessibleLabel\(enabled, enabledLabel\)/);
     assert.doesNotMatch(page, /Gtk\.MenuButton|view-more-symbolic|_overflow\(/);
-    assert.match(page, /new Adw\.ButtonRow\(\{title: _\('Add Account…'\)/);
+    assert.match(page, /label: _\('Add Account…'\)/);
+    assert.match(page, /new AddAccountDialog\(/);
     assert.match(page, /reorderProviders\(providers, providers\.map/);
     assert.match(editor, /new Adw\.ButtonRow\(\{title: _\('Delete Account'\)/);
     assert.match(editor, /remove\.add_css_class\('destructive-action'\)/);

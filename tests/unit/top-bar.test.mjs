@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {isShown, limitKey, orderedLimits, setAutomatic, shownLimits, toggleLimit, topBarGroups} from '../../build/tests/top-bar.mjs';
+import {UNTRANSLATED} from '../../build/tests/i18n.mjs';
+import {isShown, limitKey, orderedLimits, setAutomatic, shownLimits, toggleLimit, topBarGroups, topBarSummary} from '../../build/tests/top-bar.mjs';
 
 const window = (id, canonicalWindow, percent) => ({id, canonicalWindow, label: id, used: null, limit: null, percent, resetAt: null, unit: null});
 const fiveHour = window('five_hour', 'five-hour', 0.6);
@@ -77,4 +78,11 @@ test('groups keep account order and skip hidden and disabled accounts', () => {
         account('x', 'claude', auto, {enabled: false}),
     ], snapshots);
     assert.deepEqual(groups.map(group => [group.kind, group.accounts.map(item => item.id)]), [['codex', ['c1', 'c2']], ['kiro', ['k']]]);
+});
+
+test('the top-bar summary names the chosen limits', () => {
+    assert.equal(topBarSummary(UNTRANSLATED, {automatic: true, limits: []}), 'Picked automatically');
+    assert.equal(topBarSummary(UNTRANSLATED, {automatic: false, limits: []}), 'Not in the top bar');
+    assert.equal(topBarSummary(UNTRANSLATED, {automatic: false, limits: ['five-hour', 'weekly']}), 'Five-hour, Weekly');
+    assert.equal(topBarSummary(UNTRANSLATED, {automatic: false, limits: ['balance', 'seven_day_opus']}), 'Balance, seven day opus');
 });

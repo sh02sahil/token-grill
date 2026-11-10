@@ -16,6 +16,20 @@ const WINDOW_PATTERNS: Record<Exclude<CanonicalQuotaWindow, 'other'>, RegExp> = 
     'monthly': /month/i,
 };
 
+export function limitName(tr: Translator, window: Pick<UsageWindow, 'canonicalWindow' | 'label'>): string {
+    const {_} = tr;
+    switch (window.canonicalWindow) {
+    case 'five-hour':
+        return _('Five-hour');
+    case 'weekly':
+        return _('Weekly');
+    case 'monthly':
+        return _('Monthly');
+    default:
+        return window.label;
+    }
+}
+
 export function activeProvider(providers: ProviderInstance[], activeId: string): ProviderInstance | null {
     const enabled = providers.filter(provider => provider.enabled);
     return enabled.find(provider => provider.id === activeId) ?? enabled[0] ?? null;

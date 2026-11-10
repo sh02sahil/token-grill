@@ -3,10 +3,10 @@ import Gtk from 'gi://Gtk';
 
 import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 import {migrateProviderSettings} from './core/config.js';
+import {AccountsPage} from './prefs/accountsPage.js';
 import {DataPage} from './prefs/dataPage.js';
 import {GeneralPage} from './prefs/generalPage.js';
 import {NotificationsPage} from './prefs/notificationsPage.js';
-import {ProvidersPage} from './prefs/providersPage.js';
 
 export default class TokenGrillPreferences extends ExtensionPreferences {
     override fillPreferencesWindow(window: Adw.PreferencesWindow): Promise<void> {
@@ -23,7 +23,7 @@ export default class TokenGrillPreferences extends ExtensionPreferences {
         });
 
         window.add(new GeneralPage(settings));
-        window.add(new ProvidersPage(settings, window, this.path));
+        window.add(new AccountsPage(settings, window, this.path));
         window.add(new NotificationsPage(settings, window));
         window.add(new DataPage());
         return Promise.resolve();

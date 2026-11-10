@@ -1,6 +1,7 @@
 // What the top bar shows: one entry per service, holding the accounts the user
 // ticked in the popup.  Pure, so the Shell code only draws the result.
-import {selectWindow} from './display.js';
+import {limitName, selectWindow} from './display.js';
+import type {Translator} from './i18n.js';
 import type {
     AccentValue,
     Balance,
@@ -82,6 +83,21 @@ export function toggleLimit(instance: Pick<ProviderInstance, 'topBar'>, key: str
 
 export function setAutomatic(selection: TopBarSelection, on: boolean): TopBarSelection {
     return on ? {automatic: true, limits: []} : {automatic: false, limits: selection.limits};
+}
+
+// One line for preferences, which have no readings: limits are named from their keys.
+export function topBarSummary(tr: Translator, selection: TopBarSelection): string {
+    const {_} = tr;
+    if (selection.automatic)
+        return _('Picked automatically');
+    if (!selection.limits.length)
+        return _('Not in the top bar');
+    return selection.limits.map(key => {
+        if (key === BALANCE_KEY)
+            return _('Balance');
+        const canonical = (['five-hour', 'weekly', 'monthly'] as const).find(window => window === key);
+        return canonical ? limitName(tr, {canonicalWindow: canonical, label: ''}) : key.replaceAll('_', ' ');
+    }).join(', ');
 }
 
 export function topBarGroups(providers: ProviderInstance[], snapshots: Map<string, ProviderSnapshot>): TopBarGroup[] {

@@ -1,4 +1,4 @@
-import {formatMoney} from './display.js';
+import {formatMoney, limitName} from './display.js';
 import {formatText, type Translator} from './i18n.js';
 import {parseRecord, stringAt} from './json.js';
 import {providerMetadata} from './providerMetadata.js';
@@ -104,20 +104,6 @@ export function checkMilestone(
 // Like milestones, the first reading after start only seeds the state.
 export function shouldNotifyLowBalance(previousLow: boolean | null, low: boolean): boolean {
     return previousLow === false && low;
-}
-
-export function limitName(tr: Translator, window: Pick<UsageWindow, 'canonicalWindow' | 'label'>): string {
-    const {_} = tr;
-    switch (window.canonicalWindow) {
-    case 'five-hour':
-        return _('Five-hour');
-    case 'weekly':
-        return _('Weekly');
-    case 'monthly':
-        return _('Monthly');
-    default:
-        return window.label;
-    }
 }
 
 function sourceTitle(tr: Translator, serviceLabel: string, accountName: string): string {

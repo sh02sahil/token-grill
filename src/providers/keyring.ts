@@ -19,7 +19,8 @@ export interface KeyringTexts {
     unavailable: ErrorText;
 }
 
-async function importSecret(texts: KeyringTexts): Promise<typeof Secret> {
+// libsecret is optional, so a missing library becomes a message instead of a failed import.
+export async function importSecret(texts: KeyringTexts): Promise<typeof Secret> {
     let module: {default: typeof Secret};
     try {
         module = await import('gi://Secret?version=1');

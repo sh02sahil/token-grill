@@ -4,9 +4,7 @@ import GLib from 'gi://GLib';
 import {newProvider} from '../core/config.js';
 import {authFileCandidates, defaultHome, expandPath, pathExists, providerPaths} from '../core/paths.js';
 import {providerMetadata} from '../core/providerMetadata.js';
-import type {ProviderInstance, ProviderKind} from '../core/types.js';
-
-const HOME_PREFIXES: Array<[string, ProviderKind]> = [['.codex', 'codex'], ['.claude', 'claude']];
+import type {ProviderInstance} from '../core/types.js';
 
 export interface Discovery {
     found: ProviderInstance[];
@@ -17,29 +15,34 @@ function hasCredentials(provider: ProviderInstance): boolean {
     return authFileCandidates(provider).some(pathExists);
 }
 
-function prefixedHomes(): ProviderInstance[] {
+// Directories in the home folder whose names start with the prefix, such as ~/.codex-work.
+export function prefixedDirectories(prefix: string): string[] {
     const home = Gio.File.new_for_path(GLib.get_home_dir());
     const enumerator = home.enumerate_children('standard::name,standard::type', Gio.FileQueryInfoFlags.NONE, null);
-    const providers: ProviderInstance[] = [];
+    const names: string[] = [];
     for (const info of enumerator) {
-        if (info.get_file_type() !== Gio.FileType.DIRECTORY)
-            continue;
-        const name = info.get_name();
-        const match = HOME_PREFIXES.find(([prefix]) => name.startsWith(prefix));
-        if (!match)
-            continue;
-        const [prefix, kind] = match;
+        if (info.get_file_type() === Gio.FileType.DIRECTORY && info.get_name().startsWith(prefix))
+            names.push(info.get_name());
+    }
+    enumerator.close(null);
+    return names.sort();
+}
+
+// Codex and Claude homes named ~/.codex* and ~/.claude*, named after their suffix.
+export function cliHomes(kind: 'codex' | 'claude'): ProviderInstance[] {
+    const prefix = `.${kind}`;
+    const providers: ProviderInstance[] = [];
+    for (const name of prefixedDirectories(prefix)) {
         const provider = newProvider(kind, providerMetadata(kind).apps[0], `~/${name}`);
         if (!hasCredentials(provider) && !providerPaths(provider).historyDirectories.some(pathExists))
             continue;
         provider.displayName = `${providerMetadata(kind).label}${name.slice(prefix.length)}`;
         providers.push(provider);
     }
-    enumerator.close(null);
     return providers;
 }
 
-function antigravityHomes(): ProviderInstance[] {
+export function antigravityHomes(): ProviderInstance[] {
     const home = GLib.get_home_dir();
     // The agy CLI keeps its token in the keyring, so its home is recognised by its own state files.
     const cliHome = GLib.build_filenamev([home, '.gemini', 'antigravity-cli']);
@@ -60,14 +63,25 @@ function antigravityHomes(): ProviderInstance[] {
     return providers;
 }
 
-function kiroHomes(): ProviderInstance[] {
+export function kiroHomes(): ProviderInstance[] {
     const provider = newProvider('kiro', 'kiro-cli', defaultHome('kiro'));
     return hasCredentials(provider) ? [provider] : [];
 }
 
+export function kimiHomes(): ProviderInstance[] {
+    const provider = newProvider('kimi', 'kimi-cli', defaultHome('kimi'));
+    return hasCredentials(provider) ? [provider] : [];
+}
+
+export function githubCliHomes(): ProviderInstance[] {
+    const provider = newProvider('copilot', 'github-cli', defaultHome('copilot'));
+    return hasCredentials(provider) ? [provider] : [];
+}
+
 export function discoverAccounts(configured: ProviderInstance[]): Discovery {
-    const known = new Set(configured.map(provider => expandPath(provider.accountHome)));
-    const candidates = [...prefixedHomes(), ...kiroHomes(), ...antigravityHomes()];
+    // A pasted key has no home to compare.
+    const known = new Set(configured.filter(provider => provider.accountHome).map(provider => expandPath(provider.accountHome)));
+    const candidates = [...cliHomes('codex'), ...cliHomes('claude'), ...kiroHomes(), ...antigravityHomes()];
     const found = [];
     for (const candidate of candidates) {
         const home = expandPath(candidate.accountHome);
