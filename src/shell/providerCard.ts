@@ -203,6 +203,12 @@ class WindowItem extends PopupMenu.PopupBaseMenuItem {
         this._meter.visible = percent !== null;
         const caption = windowCaption(TRANSLATOR, window);
         this._caption.set_text(shown && automatic ? formatText(_('%s · chosen automatically'), caption) : caption);
+        for (const actor of [this._meter, this._value]) {
+            actor.remove_style_class_name('tokengrill-warning');
+            actor.remove_style_class_name('tokengrill-critical');
+            if (pressure !== 'neutral')
+                actor.add_style_class_name(`tokengrill-${pressure}`);
+        }
         // Pressure is shown with an icon as well as the number, never colour alone.
         this._warning.visible = pressure !== 'neutral';
         this.setOrnament(shown ? PopupMenu.Ornament.CHECK : PopupMenu.Ornament.NONE);

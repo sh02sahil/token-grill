@@ -1,10 +1,28 @@
-/* Top bar: one entry per service; meters are drawn in the shell accent colour. */
+/* Top bar: one entry per service. */
 .tokengrill-panel-box { spacing: 8px; }
 .tokengrill-panel-entry { spacing: 5px; padding: 0 2px; min-height: 20px; }
 .tokengrill-panel-account { spacing: 3px; }
-.tokengrill-panel-meter { color: -st-accent-color; }
 .tokengrill-provider-mark { min-width: 20px; min-height: 20px; max-width: 20px; max-height: 20px; }
 .tokengrill-panel-value { font-feature-settings: "tnum"; }
+
+/* Meters use the text colour of their surface because accent colours fall
+ * below 3:1 on some styles.  The danger colours are GNOME's warning and error
+ * tones, checked for at least 4.5:1 against the panel and menu backgrounds of
+ * both styles and 3:1 against the meter track.  In a warning or critical
+ * state the track takes the danger colour, because the remaining share of a
+ * nearly exhausted limit is too small to carry it alone. */
+.tokengrill-panel-meter { -tokengrill-warning-color: #f8e45c; -tokengrill-critical-color: #ff7b63; }
+.tokengrill-light .tokengrill-panel-meter { -tokengrill-warning-color: #866000; -tokengrill-critical-color: #c01c28; }
+.tokengrill-panel-value.tokengrill-warning { color: #f8e45c; }
+.tokengrill-panel-value.tokengrill-critical { color: #ff7b63; }
+.tokengrill-light .tokengrill-panel-value.tokengrill-warning { color: #866000; }
+.tokengrill-light .tokengrill-panel-value.tokengrill-critical { color: #c01c28; }
+.slider.tokengrill-meter { -barlevel-active-background-color: #ffffff; }
+.slider.tokengrill-meter.tokengrill-warning { -barlevel-active-background-color: #f8e45c; -barlevel-background-color: rgba(248, 228, 92, 0.25); }
+.slider.tokengrill-meter.tokengrill-critical { -barlevel-active-background-color: #ff7b63; -barlevel-background-color: rgba(255, 123, 99, 0.25); }
+.tokengrill-light .slider.tokengrill-meter { -barlevel-active-background-color: #222226; }
+.tokengrill-light .slider.tokengrill-meter.tokengrill-warning { -barlevel-active-background-color: #866000; -barlevel-background-color: rgba(134, 96, 0, 0.25); }
+.tokengrill-light .slider.tokengrill-meter.tokengrill-critical { -barlevel-active-background-color: #c01c28; -barlevel-background-color: rgba(192, 28, 40, 0.25); }
 
 /* Popup */
 .tokengrill-menu { min-width: 23em; max-width: 26em; }
@@ -98,4 +116,8 @@
 .tokengrill-window-name { font-weight: bold; }
 .tokengrill-value { font-feature-settings: "tnum"; margin-left: 6px; }
 .tokengrill-meter { height: 8px; }
+.tokengrill-value.tokengrill-warning { color: #f8e45c; }
+.tokengrill-value.tokengrill-critical { color: #ff7b63; }
+.tokengrill-light .tokengrill-value.tokengrill-warning { color: #866000; }
+.tokengrill-light .tokengrill-value.tokengrill-critical { color: #c01c28; }
 .tokengrill-info-item { spacing: 8px; }

@@ -260,11 +260,16 @@ export class TokenGrillIndicator extends PanelMenu.Button {
         this._themeChangedId = this._themeContext.connect('changed', () => this._updateThemeClasses());
     }
 
-    // St has no currentColor, so the toggle tints in stylesheet.css are chosen
-    // per shell style from the menu's actual text colour.  Theme nodes exist
+    // St has no currentColor, so the toggle tints and meter colours in
+    // stylesheet.css are chosen per shell style from the actual text colour of
+    // the menu and of the panel.  Theme nodes exist
     // only on stage, so this runs from update() once the menu has been added.
     private _updateThemeClasses(): void {
-        const {menuBox} = this._ui!;
+        const {menuBox, panelBox} = this._ui!;
+        if (hasLightText(panelBox))
+            panelBox.remove_style_class_name('tokengrill-light');
+        else
+            panelBox.add_style_class_name('tokengrill-light');
         if (hasLightText(menuBox))
             menuBox.remove_style_class_name('tokengrill-light');
         else

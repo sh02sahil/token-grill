@@ -6,11 +6,11 @@ import St from 'gi://St';
 
 import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
 import {accentRgb} from '../core/accent.js';
-import {displayLabel, displayPercent, formatMoney, limitName} from '../core/display.js';
+import {displayLabel, displayPercent, formatMoney, limitName, pressureClass} from '../core/display.js';
 import {formatText} from '../core/i18n.js';
 import {providerMetadata} from '../core/providerMetadata.js';
 import type {TopBarAccount, TopBarGroup} from '../core/topBar.js';
-import type {PanelDisplayStyle, PanelPercentageMode} from '../core/types.js';
+import type {PanelDisplayStyle, PanelPercentageMode, UsageWindow} from '../core/types.js';
 import {accentDot, providerIcon} from './accountChip.js';
 import {TRANSLATOR} from './translator.js';
 
@@ -26,14 +26,24 @@ const BAR_WIDTH = 5;
 const BAR_HEIGHT = 15;
 const GAP = 2;
 const DOT_SIZE = 5;
-const TRACK_ALPHA = 0.28;
+const TRACK_ALPHA = 0.25;
 
 type Rgb = [number, number, number];
 
-// Meters use the shell accent colour from the stylesheet (`.tokengrill-panel-meter`).
+// The normal meter colour is the text colour of the panel.
 function meterRgb(area: St.DrawingArea): Rgb {
     const color = area.get_theme_node().get_foreground_color();
     return [color.red / 255, color.green / 255, color.blue / 255];
+}
+
+// Danger colours come from the stylesheet so they follow the panel's light or dark set.
+// The track takes the same colour: the remaining share of a nearly exhausted limit is too small to carry it alone.
+function fillRgb(area: St.DrawingArea, window: UsageWindow): Rgb {
+    const pressure = pressureClass(window);
+    if (pressure === 'neutral')
+        return meterRgb(area);
+    const [found, color] = area.get_theme_node().lookup_color(`-tokengrill-${pressure}-color`, false);
+    return found ? [color.red / 255, color.green / 255, color.blue / 255] : meterRgb(area);
 }
 
 function fillDot(cr: Cairo.Context, rgb: Rgb, x: number, y: number, radius: number): void {
@@ -61,11 +71,12 @@ function ringStack(account: TopBarAccount, mode: PanelPercentageMode): St.Drawin
         account.limits.forEach((window, index) => {
             const [radius, width] = geometry[index] ?? geometry[0]!;
             const value = displayPercent(window, mode) ?? 0;
+            const rgb = fillRgb(area, window);
             cr.setLineWidth(width);
-            cr.setSourceRGBA(...meterRgb(area), TRACK_ALPHA);
+            cr.setSourceRGBA(...rgb, TRACK_ALPHA);
             cr.arc(centre, centre, radius, 0, Math.PI * 2);
             cr.stroke();
-            cr.setSourceRGBA(...meterRgb(area), 1);
+            cr.setSourceRGBA(...rgb, 1);
             cr.arc(centre, centre, radius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * value);
             cr.stroke();
         });
@@ -92,14 +103,15 @@ function barStack(account: TopBarAccount, mode: PanelPercentageMode): St.Drawing
         account.limits.forEach((window, index) => {
             const x = index * (BAR_WIDTH + GAP);
             const value = displayPercent(window, mode) ?? 0;
+            const rgb = fillRgb(area, window);
             roundedBar(cr, x, 0, BAR_WIDTH, BAR_HEIGHT);
-            cr.setSourceRGBA(...meterRgb(area), TRACK_ALPHA);
+            cr.setSourceRGBA(...rgb, TRACK_ALPHA);
             cr.fill();
             cr.save();
             cr.rectangle(x, BAR_HEIGHT * (1 - value), BAR_WIDTH, BAR_HEIGHT * value);
             cr.clip();
             roundedBar(cr, x, 0, BAR_WIDTH, BAR_HEIGHT);
-            cr.setSourceRGBA(...meterRgb(area), 1);
+            cr.setSourceRGBA(...rgb, 1);
             cr.fill();
             cr.restore();
         });
@@ -119,7 +131,13 @@ function numbers(account: TopBarAccount, mode: PanelPercentageMode): St.Label {
     const values = account.limits.map(window => Math.round((displayPercent(window, mode) ?? 0) * 100));
     // Translators: compact top-bar reading; %s is one or more numbers joined by "·".
     const text = formatText(_('%s%%'), values.join('·'));
-    return new St.Label({text, style_class: 'tokengrill-panel-value', y_align: Clutter.ActorAlign.CENTER});
+    const pressures = account.limits.map(pressureClass);
+    const label = new St.Label({text, style_class: 'tokengrill-panel-value', y_align: Clutter.ActorAlign.CENTER});
+    if (pressures.includes('critical'))
+        label.add_style_class_name('tokengrill-critical');
+    else if (pressures.includes('warning'))
+        label.add_style_class_name('tokengrill-warning');
+    return label;
 }
 
 function accountReading(account: TopBarAccount, style: PanelDisplayStyle, mode: PanelPercentageMode): St.Widget {
@@ -154,7 +172,13 @@ function accountDescription(account: TopBarAccount, mode: PanelPercentageMode): 
         return [formatText(_('%s, %s left'), account.name, formatMoney(account.balance, 2)), ...low].join(', ');
     if (account.missing)
         return formatText(_('%s, no reading yet'), account.name);
-    const limits = account.limits.map(window => formatText(_('%s %s'), limitName(TRANSLATOR, window), displayLabel(TRANSLATOR, window, mode)));
+    const limits = account.limits.map(window => {
+        const reading = formatText(_('%s %s'), limitName(TRANSLATOR, window), displayLabel(TRANSLATOR, window, mode));
+        const pressure = pressureClass(window);
+        if (pressure === 'critical')
+            return `${reading}, ${_('almost exhausted')}`;
+        return pressure === 'warning' ? `${reading}, ${_('running low')}` : reading;
+    });
     return [account.name, ...limits, ...low].join(', ');
 }
 

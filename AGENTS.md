@@ -227,7 +227,10 @@ same.
 - **The toggle colors of the popup are fixed rgba values** in
   `resources/stylesheet.css`. St has no `currentColor`. Thus, `indicator.ts`
   measures the text color of the menu and selects the dark or the
-  `tokengrill-light` color set. The accent colors of the accounts are data
+  `tokengrill-light` color set. The meter fills and the warning and critical
+  colors are fixed values chosen in the same way, because accent colors fail
+  contrast on some styles. The top-bar ring fill reads them from the
+  stylesheet with `lookup_color()`. The accent colors of the accounts are data
   from the user, not theme colors (UI-10).
 
 - **`StayOpenMenuItem` overrides `activate()`.** Thus, the menu stays open

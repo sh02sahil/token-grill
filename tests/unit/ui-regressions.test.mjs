@@ -36,15 +36,19 @@ test('the popup is built from native shell menu items and theme styles', async (
         assert.doesNotMatch(source, /vertical: true/);
 });
 
-test('the stylesheet keeps fixed colours to accent dots and toggle tints', async () => {
+const FIXED_COLOUR_SELECTORS = /tokengrill-accent-|tokengrill-(flat-)?toggle|tokengrill-panel-meter|tokengrill-meter|tokengrill-warning|tokengrill-critical/;
+
+const RGB_COLOUR_SELECTORS = /tokengrill-(flat-)?toggle|tokengrill-meter\.tokengrill-(warning|critical)/;
+
+test('the stylesheet keeps fixed colours to accent dots, toggle tints, meters and danger colours', async () => {
     const css = await read('resources/stylesheet.css');
     const rules = css.replace(/\/\*[\s\S]*?\*\//g, '');
     for (const rule of rules.match(/[^{}]+\{[^}]*\}/g)) {
         const [selector] = rule.split('{');
         if (/#[0-9a-f]{3,8}\b/i.test(rule))
-            assert.match(selector, /tokengrill-accent-|tokengrill-(flat-)?toggle/, `hex colour outside accent/toggle rules: ${selector.trim()}`);
+            assert.match(selector, FIXED_COLOUR_SELECTORS, `hex colour outside accent, toggle, meter and danger rules: ${selector.trim()}`);
         if (/\brgba?\(/i.test(rule))
-            assert.match(selector, /tokengrill-(flat-)?toggle/, `rgb colour outside toggle rules: ${selector.trim()}`);
+            assert.match(selector, RGB_COLOUR_SELECTORS, `rgb colour outside toggle and meter danger rules: ${selector.trim()}`);
     }
     assert.doesNotMatch(rules, /\bhsla?\(|font-family/);
     assert.doesNotMatch(css, /Hallmark|\.ts\b/);
