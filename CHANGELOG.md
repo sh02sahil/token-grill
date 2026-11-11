@@ -27,6 +27,11 @@ Top bar and popup:
   Automatically" to let Token Grill show the limit with the most usage.
 - Click a service in the top bar to open the popup on that service.
 - The popup can show the accounts of a service as buttons or as a list.
+- Rings and bars use the text color of the top bar and the popup, so they are
+  easy to read with all accent colors. A limit with less than 20% remaining
+  turns yellow (amber in the light style). A limit with less than 5% remaining
+  turns red. All the colors have a contrast of at least 4.5:1 in the light
+  style and in the dark style.
 
 Notifications:
 
@@ -69,6 +74,9 @@ Bug fixes:
   account.
 - Claude alerts operate again. Before this fix, each refresh started the alert
   steps of a Claude limit again.
+- Claude accounts show the weekly limit of each model, for example
+  "Weekly · Fable". Before this fix, Token Grill did not show this limit when
+  the account also had a weekly limit for all models.
 - The Claude sign-in hint names the correct command: `claude auth login`.
 - The **Local History** switch is near the top of the account page.
 
