@@ -493,6 +493,28 @@ async def test_concurrent_accounts_sharing_a_file_renew_once(tmp_path: Path, cla
     assert len((tmp_path / "calls").read_text().splitlines()) == 1
 
 
+async def test_renewal_of_one_file_does_not_hold_up_another(tmp_path: Path, claude_cli: Path) -> None:
+    slow, fast = tmp_path / "slow", tmp_path / "fast"
+    for folder in (slow, fast):
+        write_auth(folder, {"accessToken": "expired", "refreshToken": "refresh", "expiresAt": 1})
+    (slow / "mode").write_text("hang")
+    ctx = make_ctx(
+        tmp_path, Recorder(), httpx.MockTransport(lambda r: httpx.Response(200, json=USAGE)), claude_renewal=True
+    )
+    loader = renewal.ClaudeTokenLoader()
+    blocked = asyncio.create_task(loader.load(make_instance(slow), ctx))
+    try:
+        async with asyncio.timeout(5):
+            while not (slow / "calls").exists():
+                await asyncio.sleep(0.01)
+            assert await loader.load(make_instance(fast), ctx) == "renewed"
+        assert not blocked.done()
+    finally:
+        blocked.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await blocked
+
+
 async def test_override_renews_only_the_selected_credentials_folder(tmp_path: Path, claude_cli: Path) -> None:
     home, other = tmp_path / "home", tmp_path / "other"
     for folder in (home, other):

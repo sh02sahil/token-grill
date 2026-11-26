@@ -20,29 +20,31 @@ RETRY_SECONDS = 300
 
 class ClaudeTokenLoader:
     def __init__(self) -> None:
-        self._lock = asyncio.Lock()
+        self._locks: dict[str, asyncio.Lock] = {}
         self._retry_after: dict[str, float] = {}
 
     async def load(self, instance: ProviderInstance, ctx: CollectorContext) -> str:
         if not ctx.claude_renewal:
             return await load_claude_access_token(instance)
+        path = Path(provider_paths(instance)["authFile"])
+        # Two account homes can reach one file through a link; the key is the file itself.
+        key = str(await asyncio.to_thread(path.resolve))
         # Accounts can share a credentials file. A waiter must reread it after renewal.
-        async with self._lock:
+        async with self._locks.setdefault(key, asyncio.Lock()):
             try:
                 return await load_claude_access_token(instance)
             except ServiceError as error:
                 if error.code != "auth-expired" or instance["app"] != "claude-code":
                     raise
-                path = Path(provider_paths(instance)["authFile"])
                 now = monotonic()
-                self._retry_after = {key: due for key, due in self._retry_after.items() if due > now}
+                self._retry_after = {file: due for file, due in self._retry_after.items() if due > now}
                 # The CLI has no option for an arbitrarily named credentials file.
-                if path.name != ".credentials.json" or str(path) in self._retry_after:
+                if path.name != ".credentials.json" or key in self._retry_after:
                     raise
                 oauth = record_at(await read_credential_json(str(path)), "claudeAiOauth")
                 if not oauth or not string_at(oauth, "refreshToken"):
                     raise
-                self._retry_after[str(path)] = now + RETRY_SECONDS
+                self._retry_after[key] = now + RETRY_SECONDS
             result = await _run_cli(path.parent)
             ctx.record("sign-in", result)
             # auth status may exit zero even when its startup refresh failed.
