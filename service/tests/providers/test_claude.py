@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import json
 import os
 import sys
@@ -480,6 +481,41 @@ async def test_failed_renewal_keeps_auth_error_and_is_throttled(
     now += renewal.RETRY_SECONDS
     await collector.collect(make_instance(home), empty_snapshot("acct"), ctx)
     assert len((home / "calls").read_text().splitlines()) == 2
+
+
+async def test_each_failed_renewal_doubles_the_wait_and_success_resets_it(
+    tmp_path: Path, claude_cli: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = tmp_path / "home"
+    write_auth(home, {"accessToken": "expired", "refreshToken": "refresh", "expiresAt": 1})
+    (home / "mode").write_text("fail")
+    now = 0.0
+    monkeypatch.setattr(renewal, "monotonic", lambda: now)
+    ctx = make_ctx(
+        tmp_path, Recorder(), httpx.MockTransport(lambda r: httpx.Response(200, json=USAGE)), claude_renewal=True
+    )
+    loader = renewal.ClaudeTokenLoader()
+
+    async def attempts_at(moment: float) -> int:
+        nonlocal now
+        now = moment
+        with contextlib.suppress(ServiceError):
+            await loader.load(make_instance(home), ctx)
+        return len((home / "calls").read_text().splitlines())
+
+    assert await attempts_at(0) == 1
+    last = 0.0
+    for count, wait in enumerate([300, 600, 1200, 2400, 3600, 3600], start=2):
+        assert await attempts_at(last + wait - 1) == count - 1
+        assert await attempts_at(last + wait) == count
+        last += wait
+    (home / "mode").write_text("renew")
+    assert await attempts_at(last + 3600) == 8
+    write_auth(home, {"accessToken": "expired", "refreshToken": "refresh", "expiresAt": 1})
+    (home / "mode").write_text("fail")
+    last += 3600
+    assert await attempts_at(last + 299) == 8
+    assert await attempts_at(last + 300) == 9
 
 
 async def test_concurrent_accounts_sharing_a_file_renew_once(tmp_path: Path, claude_cli: Path) -> None:
