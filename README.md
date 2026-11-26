@@ -30,9 +30,12 @@ These are the functions of the top bar and the popup:
 - If a sign-in is missing or expired, **Sign In Again in a Terminal** opens
   your terminal with the login command of that account, for example
   `codex login` with `CODEX_HOME` set to the home of the account. Token Grill
-  does not exchange Codex or Claude refresh tokens itself. For an expired
-  Claude Code access token, the service asks the installed Claude CLI to renew
-  its own credentials with `claude auth status` and then rereads them.
+  does not use the Codex or Claude refresh tokens itself: each is used only
+  once, so a renewal by Token Grill would sign out the CLI.
+- **Renew Expired Claude Code Sign-Ins** in Preferences (General, Updates) is
+  off by default. When you turn it on, the service runs the installed
+  `claude auth status` for an expired Claude Code sign-in. Claude Code renews
+  the sign-in and saves it, and the service reads it again.
 - **Usage Pace** in the account preferences shows whether a limit is used
   faster or slower than its period passes. The popup shows one line for each
   limit, and the top bar shows an icon: a flame for a fast pace, a check mark
@@ -219,27 +222,32 @@ The Antigravity quota service gives data only when the User-Agent contains
 the word Antigravity. Thus, the User-Agent names all the services that Token Grill
 monitors.
 
-For expired Claude Code credentials with a refresh token, the service runs
-`claude auth status`, without a shell or terminal, with `CLAUDE_CONFIG_DIR`
-set to the folder of the credentials file. Claude Code owns its refresh
-requests, locking, and credential writes; these requests use the CLI's network
-configuration, not Token Grill's HTTP client. Token Grill disables CLI
-auto-updates and nonessential traffic for this command and discards its output.
-The command has a 30-second limit and is stopped if collection is cancelled.
-Failed attempts are limited to one per file every five minutes. The CLI must
-be on PATH or installed at `~/.local/bin/claude`. This was checked with Claude
-Code 2.1.285. A successful exit alone does not count as a renewed sign-in:
-Token Grill rereads the file and checks its expiry.
+Token Grill starts no other program by itself, except when you turn on the
+Claude Code renewal. Only when you click **Sign In Again in a Terminal**, the
+extension opens your terminal with the login command of that account's CLI,
+from a fixed list in the extension. Only when you turn on **Renew Expired
+Claude Code Sign-Ins** in Preferences (it is off by default), the service runs
+`claude auth status` by itself for an expired Claude Code sign-in:
 
-This applies only to Claude Code files named `.credentials.json`, including
-an override with that name. OpenCode credentials and other filenames still
-need renewal by their owning app. Credential checks in Preferences stay
-read-only. A revoked refresh token still needs an interactive sign-in.
+- The command has no shell and no terminal. `CLAUDE_CONFIG_DIR` is the folder
+  of the credentials file, so the right account renews.
+- Claude Code renews the sign-in and writes its own file. Its requests do not
+  go through the HTTP client of the service. The service turns off the
+  automatic updates and the other nonessential traffic of the CLI for this
+  command.
+- The service discards the output. The command stops after 30 seconds, or
+  when the refresh is cancelled.
+- One credentials file renews at a time. After a failure, the next attempt
+  waits 5 minutes, and the wait doubles after each further failure, up to 1
+  hour.
+- Then the service reads the file again. Only a token that is not expired
+  counts.
+- It applies only to Claude Code files named `.credentials.json`, not to
+  OpenCode. The CLI must be on the `PATH` or in `~/.local/bin/claude`. A
+  revoked sign-in still needs **Sign In Again in a Terminal**.
 
-When you click **Sign In Again in a Terminal**, the extension opens your
-terminal with the login command of that account's CLI, from a fixed list in
-the extension. Token Grill does not collect telemetry or read or send prompts
-or responses.
+Token Grill does not collect telemetry. It does not read or send prompts or
+responses.
 
 The Kiro usage request gets the e-mail address of the account. The popup shows
 this address. Thus, you can see which account `kiro-cli` uses. Token Grill does not

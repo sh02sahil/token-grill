@@ -240,11 +240,11 @@ Rules for the service (network and data):
   not write to them. Keep refreshed tokens only in memory. Do not unlock a
   keyring. Do not decrypt the secrets of another app.
 
-- Do not exchange a token whose refresh token is single-use (Codex, Claude):
+- Do not refresh a token whose refresh token is single-use (Codex, Claude):
   the CLI keeps the old one, so a refresh by Token Grill signs the CLI out.
-  For expired Claude Code credentials, the service delegates renewal to
-  `claude auth status` and rereads the file (SV-5). The CLI owns the writes
-  and refresh locking. Kiro and Antigravity tokens can be refreshed in memory.
+  Only if the user turned on `claudeRenewal`, the service runs
+  `claude auth status` for an expired Claude Code sign-in and reads the file
+  again (SV-5). Kiro and Antigravity tokens can be refreshed in memory.
 
 - Usage pace needs `UsageWindow.durationSeconds`. Take it from what the
   service reports: a duration field (Codex), the window's own name, such as
@@ -329,6 +329,16 @@ same.
   `GLib.shell_quote()`. `shell/signIn.ts` uses `Gio.AppInfo.create_from_commandline()`
   with `NEEDS_TERMINAL`, so GLib picks the terminal and no shell parses the
   command (X-3, X-4).
+
+- **The service runs `claude auth status` for an expired Claude Code
+  sign-in.** It does this only if the user turned on the setting
+  `claudeRenewal` ("Renew Expired Claude Code Sign-Ins" in Preferences). It is
+  off by default. Claude Code renews the token and writes its own file, so the
+  single-use refresh token stays with the CLI and the CLI stays signed in. The
+  argv is fixed (`providers/claude/renewal.py`), no shell parses it, the output
+  is discarded, and the command stops after 30 s or on cancellation. One
+  credentials file renews at a time, and a failure makes the next attempt wait
+  longer, from 5 minutes up to 1 hour (SV-3, SV-5).
 
 - **The Copy buttons write a fixed setup command to the clipboard.** The popup
   (`shell/serviceCard.ts`) calls `St.Clipboard.set_text()`. The preferences

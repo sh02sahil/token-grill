@@ -1,13 +1,5 @@
 # Changelog
 
-## Unreleased
-
-- When a Claude Code access token expires, the service runs `claude auth status`
-  for that account and rereads its credentials. Claude Code handles renewal and
-  saves the replacement tokens. This keeps local usage readings current when
-  you mostly use Claude on another machine. Failed attempts are limited to one
-  per credentials file every five minutes. A revoked login still needs sign-in.
-
 ## 0.5.0
 
 - Token Grill has two parts now: the extension and a small service,
@@ -43,6 +35,14 @@
 - The journal diagnostics switch is no longer in the extension. The setting
   (`journalDiagnostics`) now belongs to the service. The README shows the
   command that sets it.
+- Claude Code: Preferences -> General -> Renew Expired Claude Code Sign-Ins
+  (the service setting `claudeRenewal`) is off by default. When you turn it
+  on and a Claude Code sign-in has expired, the service runs the installed
+  `claude auth status` for that account. Claude Code renews the sign-in and
+  saves it, and the service reads it again. This keeps the readings current
+  when you mostly use Claude on another computer. After a failure, the next
+  attempt waits 5 minutes, and the wait doubles up to 1 hour. A revoked
+  sign-in still needs Sign In Again in a Terminal.
 - Kiro and Cursor no longer need the Gda library. The extension no longer
   needs libsecret.
 - A history scan that stops in the middle of a file, for example at a screen

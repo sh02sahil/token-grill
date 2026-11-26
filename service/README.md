@@ -62,13 +62,17 @@ is in the GNOME keyring.
 ## Privacy
 
 The service reads the credentials that the tools of each service stored on this
-computer, read-only. It never unlocks a keyring or exchanges a Codex or Claude
-refresh token itself. For an expired Claude Code sign-in, it runs the installed
-`claude auth status` with the account's `CLAUDE_CONFIG_DIR`; Claude Code handles
-renewal and writes its own replacement credentials. The service discards the
-command's output, limits it to 30 seconds, and rereads the credentials. Failed
-attempts are limited to one per file every five minutes. The CLI's requests
-use its own network configuration, with nonessential traffic disabled.
+computer, read-only. It never unlocks a keyring, and it never uses a Codex or
+a Claude refresh token itself.
+
+The setting `claudeRenewal` is off by default. Turn it on in the extension
+Preferences: **Renew Expired Claude Code Sign-Ins** (General, Updates). Then,
+for an expired Claude Code sign-in, the service runs the installed
+`claude auth status` with `CLAUDE_CONFIG_DIR` set to the folder of the
+account. Claude Code renews the sign-in and writes its own file. The service
+discards the output, stops the command after 30 seconds, and reads the file
+again. After a failure, the next attempt for that file waits 5 minutes, and
+the wait doubles after each further failure, up to 1 hour.
 
 The service's HTTP client sends a credential only to its own service, over HTTPS,
 with no redirects, and only to the hosts in the table in the
@@ -97,7 +101,7 @@ python3 -m venv .venv
 To test Claude usage with a real sign-in, set `TOKENGRILL_LIVE_CLAUDE_HOME`
 to the Claude Code config directory and run
 `.venv/bin/pytest -q -m integration tests/providers/test_claude.py`.
-This may ask the installed Claude CLI to renew expired credentials. The test
-does not print tokens, account details, or usage figures.
+The test does not run the Claude CLI, and it does not print tokens, account
+details, or usage figures.
 
 Refer to [CONTRIBUTING.md](https://github.com/sh02sahil/token-grill/blob/main/CONTRIBUTING.md). The license is GPL-3.0-or-later.
