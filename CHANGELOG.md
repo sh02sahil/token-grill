@@ -52,6 +52,8 @@
 - In the top bar, the color dot of an account sits beside its bars, or beside
   its rings when three limits are shown. Before, it sat below them and moved
   the reading out of line with the rest of the top bar.
+- Preferences name each limit that the top bar shows as the popup does, for
+  example "Weekly - Fable", not the internal name of the limit.
 - OpenCode Go: the rolling limit shows no usage pace. The service does not
   report the length of that window, and Token Grill no longer assumes five
   hours.

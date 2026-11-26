@@ -146,7 +146,8 @@ export class AccountPage extends Adw.NavigationPage {
 
     private _topBarText(): string {
         // Translators: the account's top-bar choice, then a hint.
-        return formatText(_('%s - Change this in the popup'), topBarSummary(TRANSLATOR, this._provider.topBar));
+        const summary = topBarSummary(TRANSLATOR, this._provider.topBar, this._context.windows(this._provider.id));
+        return formatText(_('%s - Change this in the popup'), summary);
     }
 
     // Only the changed fields go to the service, so a top-bar choice made in the popup meanwhile stays.

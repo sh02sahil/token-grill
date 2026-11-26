@@ -41,10 +41,13 @@ test('groups keep account order and skip hidden and disabled accounts', () => {
 });
 
 test('the top-bar summary names the chosen limits', () => {
-    assert.equal(topBarSummary(UNTRANSLATED, {automatic: true, limits: []}), 'Picked automatically');
-    assert.equal(topBarSummary(UNTRANSLATED, {automatic: false, limits: []}), 'Not in the top bar');
-    assert.equal(topBarSummary(UNTRANSLATED, {automatic: false, limits: ['five-hour', 'weekly']}), 'Five-hour, Weekly');
-    assert.equal(topBarSummary(UNTRANSLATED, {automatic: false, limits: ['balance', 'seven_day_opus']}), 'Balance, seven day opus');
+    assert.equal(topBarSummary(UNTRANSLATED, {automatic: true, limits: []}, []), 'Picked automatically');
+    assert.equal(topBarSummary(UNTRANSLATED, {automatic: false, limits: []}, []), 'Not in the top bar');
+    assert.equal(topBarSummary(UNTRANSLATED, {automatic: false, limits: ['five-hour', 'weekly']}, []), 'Five-hour, Weekly');
+    assert.equal(topBarSummary(UNTRANSLATED, {automatic: false, limits: ['balance', 'seven_day_opus']}, []), 'Balance, seven day opus');
+    // A limit without a canonical name takes the label of the reading.
+    const fable = {id: 'limits:weekly_scoped:Fable', key: 'limits:weekly_scoped:Fable', canonicalWindow: 'other', label: 'Weekly - Fable'};
+    assert.equal(topBarSummary(UNTRANSLATED, {automatic: false, limits: ['five-hour', fable.key]}, [fable]), 'Five-hour, Weekly - Fable');
 });
 
 test('a DeepSeek account on Pick Automatically still warns of a low balance', () => {

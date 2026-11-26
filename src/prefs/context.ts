@@ -4,7 +4,7 @@ import GLib from 'gi://GLib';
 
 import {ServiceCallError, type ClientHandlers, type ServiceClient} from '../client.js';
 import {isCancellation} from '../core/gio.js';
-import type {ProviderInstance, Settings} from '../core/types.js';
+import type {ProviderInstance, Settings, SnapshotWindow} from '../core/types.js';
 
 type Change = 'status' | 'accounts' | 'settings';
 type PrefsLogger = Pick<Console, 'warn' | 'error'>;
@@ -40,6 +40,11 @@ export class PrefsContext implements ClientHandlers {
 
     get settings(): Settings | null {
         return this.client.state?.settings ?? null;
+    }
+
+    // An account has no snapshot until its first reading.
+    windows(accountId: string): SnapshotWindow[] {
+        return this.client.state?.snapshots[accountId]?.windows ?? [];
     }
 
     // The returned function stops the listener.

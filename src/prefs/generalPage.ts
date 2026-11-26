@@ -107,7 +107,7 @@ export class GeneralPage extends Adw.PreferencesPage {
         this._rows = shown.map(provider => new Adw.ActionRow({
             // Translators: a service name, then the account name.
             title: formatText(_('%s - %s'), providerMetadata(provider.kind).label, provider.displayName),
-            subtitle: topBarSummary(TRANSLATOR, provider.topBar),
+            subtitle: topBarSummary(TRANSLATOR, provider.topBar, this._context.windows(provider.id)),
         }));
         if (!this._rows.length)
             this._rows = [new Adw.ActionRow({title: _('Nothing Is Shown'), subtitle: _('Check a limit in the popup to show it')})];

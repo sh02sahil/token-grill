@@ -38,7 +38,9 @@ export function isShown(instance: Pick<ProviderInstance, 'topBar'>): boolean {
 }
 
 // One line for preferences, which have no readings: limits are named from their keys.
-export function topBarSummary(tr: Translator, selection: TopBarSelection): string {
+// The names come from the account's last reading; a limit without a reading
+// keeps its key.
+export function topBarSummary(tr: Translator, selection: TopBarSelection, windows: SnapshotWindow[]): string {
     const {_} = tr;
     if (selection.automatic)
         return _('Picked automatically');
@@ -47,7 +49,10 @@ export function topBarSummary(tr: Translator, selection: TopBarSelection): strin
     return selection.limits.map(key => {
         if (key === BALANCE_KEY)
             return _('Balance');
-        const canonical = (['five-hour', 'weekly', 'monthly'] as const).find(window => window === key);
+        const window = windows.find(item => item.key === key);
+        if (window)
+            return limitName(tr, window);
+        const canonical = (['five-hour', 'weekly', 'monthly'] as const).find(name => name === key);
         return canonical ? limitName(tr, {id: canonical, canonicalWindow: canonical, label: ''}) : key.replaceAll('_', ' ');
     }).join(', ');
 }

@@ -8,7 +8,7 @@ import {credentialLabel} from '../core/accountText.js';
 import {formatText} from '../core/i18n.js';
 import {providerMetadata} from '../core/providerMetadata.js';
 import {topBarSummary} from '../core/topBar.js';
-import type {ProviderInstance, ProviderKind} from '../core/types.js';
+import type {ProviderInstance, ProviderKind, SnapshotWindow} from '../core/types.js';
 import {AccountPage} from './accountPage.js';
 import {AddAccountDialog} from './addAccountDialog.js';
 import type {PrefsContext} from './context.js';
@@ -28,8 +28,8 @@ function byService(providers: ProviderInstance[]): Array<[ProviderKind, Provider
     return [...groups];
 }
 
-function accountSubtitle(provider: ProviderInstance, status: string | null): string {
-    const parts = [topBarSummary(TRANSLATOR, provider.topBar)];
+function accountSubtitle(provider: ProviderInstance, windows: SnapshotWindow[], status: string | null): string {
+    const parts = [topBarSummary(TRANSLATOR, provider.topBar, windows)];
     if (status !== null)
         parts.push(status);
     if (provider.app === 'opencode')
@@ -123,12 +123,12 @@ export class AccountsPage extends Adw.PreferencesPage {
     private _buildRow(provider: ProviderInstance): Adw.ActionRow {
         const row = new Adw.ActionRow({
             title: provider.displayName,
-            subtitle: accountSubtitle(provider, _('Checking credentials...')),
+            subtitle: accountSubtitle(provider, this._context.windows(provider.id), _('Checking credentials...')),
             activatable: true,
         });
         this._context.request(client => client.credentialState(provider.id), {
             done: state => {
-                row.subtitle = accountSubtitle(provider, credentialLabel(TRANSLATOR, state));
+                row.subtitle = accountSubtitle(provider, this._context.windows(provider.id), credentialLabel(TRANSLATOR, state));
             },
             cancellable: this._cancellable,
         });
