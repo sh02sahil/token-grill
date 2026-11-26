@@ -9,7 +9,7 @@ import {providerMetadata} from '../core/providerMetadata.js';
 import {isShown, topBarSummary} from '../core/topBar.js';
 import type {PrefsContext} from './context.js';
 import {TRANSLATOR} from './translator.js';
-import {bindServiceNumber} from './widgets.js';
+import {bindServiceNumber, bindServiceSwitch} from './widgets.js';
 
 interface ToggleRowOptions {
     key: string;
@@ -82,6 +82,12 @@ export class GeneralPage extends Adw.PreferencesPage {
         });
         bindServiceNumber(context, 'refreshIntervalSeconds', interval);
         updates.add(interval);
+        const renewal = new Adw.SwitchRow({
+            title: _('Renew Expired Claude Code Sign-Ins'),
+            subtitle: _('When a sign-in has expired, the service runs claude auth status so Claude Code renews it'),
+        });
+        bindServiceSwitch(context, 'claudeRenewal', renewal);
+        updates.add(renewal);
         const more = new Adw.ExpanderRow({title: _('More Options')});
         more.add_row(toggleRow(settings, {
             key: 'popup-account-picker',

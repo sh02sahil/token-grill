@@ -77,6 +77,7 @@ export function presentKeyError(parent: Gtk.Widget): void {
 }
 
 type NumberSetting = 'refreshIntervalSeconds' | 'alertStepPercent';
+type SwitchSetting = 'alertsEnabled' | 'claudeRenewal';
 
 // A setting that the service keeps: the row follows the service, and a change the user makes is
 // sent to it. A refused change puts the row back.
@@ -98,7 +99,7 @@ export function bindServiceNumber(context: PrefsContext, key: NumberSetting, row
     });
 }
 
-export function bindServiceSwitch(context: PrefsContext, key: 'alertsEnabled', row: Adw.SwitchRow): void {
+export function bindServiceSwitch(context: PrefsContext, key: SwitchSetting, row: Adw.SwitchRow): void {
     const show = () => {
         const settings = context.settings;
         if (settings !== null)

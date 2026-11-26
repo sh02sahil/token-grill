@@ -248,6 +248,8 @@ test('Preferences read and write the moved settings through the service', async 
     assert.match(general, /bindServiceNumber\(context, 'refreshIntervalSeconds', interval\)/);
     assert.match(notifications, /bindServiceNumber\(context, 'alertStepPercent', step\)/);
     assert.match(notifications, /bindServiceSwitch\(context, 'alertsEnabled', enabled\)/);
+    // Off unless the user turns it on: the service starts the Claude CLI only then.
+    assert.match(general, /bindServiceSwitch\(context, 'claudeRenewal', renewal\)/);
     assert.match(widgets, /client => client\.setSettings\(patch\)/);
     // The look stays in GSettings.
     for (const key of ['panel-display-style', 'panel-percentage-mode', 'panel-position', 'popup-account-picker'])

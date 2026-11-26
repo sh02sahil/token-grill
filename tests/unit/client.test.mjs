@@ -36,7 +36,7 @@ test('a payload the client cannot read is too old', () => {
 
 const state = extra => JSON.stringify({
     schema: 1, apiVersion: 1, serviceVersion: '0.5.0', paused: false,
-    settings: {refreshIntervalSeconds: 300, alertsEnabled: true, alertStepPercent: 10, journalDiagnostics: false},
+    settings: {refreshIntervalSeconds: 300, alertsEnabled: true, alertStepPercent: 10, journalDiagnostics: false, claudeRenewal: false},
     accounts: [], snapshots: {}, runtime: {}, ...extra,
 });
 
@@ -52,6 +52,7 @@ test('signal payloads are checked for schema 1', () => {
     assert.deepEqual(parseAccounts('{"schema":1,"accounts":[]}'), []);
     assert.throws(() => parseAccounts('{"schema":2,"accounts":[]}'), /schema/);
     assert.equal(parseSettings('{"schema":1,"settings":{"alertsEnabled":false}}').alertsEnabled, false);
+    assert.equal(parseSettings('{"schema":1,"settings":{"claudeRenewal":true}}').claudeRenewal, true);
     assert.throws(() => parseSettings('{"schema":3,"settings":{}}'), /schema/);
     assert.equal(parseAlert('{"schema":1,"kind":"test","accountId":"a"}').kind, 'test');
     assert.throws(() => parseAlert('{"kind":"test"}'), /schema/);

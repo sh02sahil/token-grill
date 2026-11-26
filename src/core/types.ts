@@ -182,6 +182,7 @@ export interface Settings {
     alertsEnabled: boolean;
     alertStepPercent: number;
     journalDiagnostics: boolean;
+    claudeRenewal: boolean;
 }
 
 export interface ServiceState {
