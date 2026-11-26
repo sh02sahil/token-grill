@@ -254,6 +254,7 @@ async def test_set_settings_saves_reschedules_and_signals(rig: Rig) -> None:
         {"alertStepPercent": 4},
         {"alertStepPercent": 51},
         {"alertsEnabled": 1},
+        {"claudeRenewal": "true"},
         {"unknown": 1},
         [],
     ],

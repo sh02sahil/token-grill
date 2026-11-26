@@ -214,6 +214,7 @@ class Settings(TypedDict):
     alertsEnabled: bool
     alertStepPercent: int
     journalDiagnostics: bool
+    claudeRenewal: bool
 
 
 class ServiceState(TypedDict):

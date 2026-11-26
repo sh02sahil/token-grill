@@ -24,6 +24,8 @@ class ClaudeTokenLoader:
         self._retry_after: dict[str, float] = {}
 
     async def load(self, instance: ProviderInstance, ctx: CollectorContext) -> str:
+        if not ctx.claude_renewal:
+            return await load_claude_access_token(instance)
         # Accounts can share a credentials file. A waiter must reread it after renewal.
         async with self._lock:
             try:

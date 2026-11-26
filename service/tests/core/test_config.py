@@ -321,8 +321,16 @@ def test_missing_config_gives_the_defaults(tmp_path: Path) -> None:
         "alertsEnabled": True,
         "alertStepPercent": DEFAULT_STEP_PERCENT,
         "journalDiagnostics": False,
+        "claudeRenewal": False,
     }
     assert DEFAULT_STEP_PERCENT == 10
+
+
+def test_config_without_claude_renewal_reads_as_off(tmp_path: Path) -> None:
+    (tmp_path / "config.json").write_text(json.dumps({"schema": 1, "accounts": [], "journalDiagnostics": True}))
+    config = ConfigStore(tmp_path / "config.json").load()
+    assert config["claudeRenewal"] is False
+    assert config["journalDiagnostics"] is True
 
 
 def test_corrupt_config_is_kept_aside(tmp_path: Path) -> None:

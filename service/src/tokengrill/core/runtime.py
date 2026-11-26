@@ -475,6 +475,7 @@ class Runtime:
             "alertsEnabled": config["alertsEnabled"],
             "alertStepPercent": config["alertStepPercent"],
             "journalDiagnostics": config["journalDiagnostics"],
+            "claudeRenewal": config["claudeRenewal"],
         }
 
     def _interval_seconds(self) -> int:
@@ -554,6 +555,7 @@ class Runtime:
             on_record=lambda step, detail: self._record(instance, step, detail),
             manual=manual,
             history_enabled=self._shell_connected,
+            claude_renewal=self._settings()["claudeRenewal"],
         )
         self._record(instance, "sign-in", self._sign_in_source(instance))
         previous = self._snapshots.get(account_id)
