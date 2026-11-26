@@ -63,7 +63,7 @@ test('window captions show exact credits, reset countdown and local date/time', 
     const kiro = {unit: 'credits', used: 4042.73, limit: 5000, resetAt: now + (18 * 24 + 13) * 3600000};
     assert.equal(windowCaption(tr, kiro, dateTime, now), `${number(4042.73)} of ${number(5000)} credits · Resets in 18d 13h (2026-10-31T23:00:00.000Z)`);
     assert.equal(windowCaption(tr, {resetAt: now + 2 * 3600000 + 10 * 60000}, dateTime, now), 'Resets in 2h 10m (2026-10-13T12:10:00.000Z)');
-    assert.equal(windowCaption(tr, {resetAt: now - 1000}, dateTime, now), 'Reset time passed (2026-10-13T09:59:59.000Z)');
+    assert.equal(windowCaption(tr, {resetAt: now - 1000}, dateTime, now), 'Reset at 2026-10-13T09:59:59.000Z · waiting for a new reading');
     assert.equal(windowCaption(tr, {unit: 'credits', used: 12.5, limit: 0, resetAt: null}, dateTime, now), `${number(12.5)} credits used · pooled or unlimited · Reset time unknown`);
     assert.equal(windowCaption(tr, null, dateTime, now), 'No data yet');
 });
@@ -72,8 +72,26 @@ test('window captions distinguish imminent resets from cached reset times in the
     const now = Date.UTC(2026, 9, 13, 10, 0);
     const dateTime = timestamp => new Date(timestamp).toISOString();
     assert.equal(windowCaption(tr, {resetAt: now + 30000}, dateTime, now), 'Resets now (2026-10-13T10:00:30.000Z)');
-    assert.equal(windowCaption(tr, {resetAt: now}, dateTime, now), 'Resets now (2026-10-13T10:00:00.000Z)');
-    assert.equal(windowCaption(tr, {resetAt: now - 3 * 86400000}, dateTime, now), 'Reset time passed (2026-10-10T10:00:00.000Z)');
+    assert.equal(windowCaption(tr, {resetAt: now}, dateTime, now), 'Reset at 2026-10-13T10:00:00.000Z · waiting for a new reading');
+    assert.equal(windowCaption(tr, {resetAt: now - 3 * 86400000}, dateTime, now), 'Reset at 2026-10-10T10:00:00.000Z · waiting for a new reading');
+});
+
+test('past reset captions give sign-in guidance only after an authentication failure following the reset', () => {
+    const now = Date.UTC(2026, 9, 13, 10, 0);
+    const window = {resetAt: now - 60000};
+    const dateTime = () => '09:59';
+    const failed = {completedAt: now, sources: {limits: 'failed'}};
+    const errorInfo = {recovery: 'reauthenticate'};
+    const snapshot = {errorInfo, quotaFetchedAt: now - 120000};
+    assert.equal(windowCaption(tr, window, dateTime, now, snapshot, failed), 'Reset at 09:59 · usage is probably back to 0% · sign in again to update');
+    assert.equal(windowCaption(tr, window, dateTime, now, snapshot, {...failed, completedAt: now - 90000}), 'Reset at 09:59 · waiting for a new reading');
+    assert.equal(windowCaption(tr, window, dateTime, now, {...snapshot, errorInfo: {recovery: 'retry'}}, failed), 'Reset at 09:59 · waiting for a new reading');
+    assert.equal(windowCaption(tr, window, dateTime, now, {...snapshot, quotaFetchedAt: now - 30000}, failed), 'Reset at 09:59 · sign in again to update');
+});
+
+test('only windows identified as waiting for the first message show the next-message caption', () => {
+    assert.equal(windowCaption(tr, {resetAt: null, startsWithNextMessage: true}, () => ''), 'Starts with your next message');
+    assert.equal(windowCaption(tr, {resetAt: null, percent: 0}, () => ''), 'Reset time unknown');
 });
 
 test('window captions leave missing reset dates unavailable without formatting them', () => {

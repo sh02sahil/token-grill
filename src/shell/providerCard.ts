@@ -56,7 +56,14 @@ function clockLabel(timestamp: number): string {
 
 function dateTimeLabel(timestamp: number): string {
     const date = new Date(timestamp);
-    return _('%s, %s').format(date.toLocaleDateString(undefined, {year: 'numeric', month: 'short', day: 'numeric'}), clockLabel(timestamp));
+    const time = formatTime(date);
+    const now = new Date();
+    // Shell formats future dates and times less than 24 hours old as a clock time.
+    if (now.getTime() - timestamp < 86400000 && date.toDateString() !== now.toDateString()) {
+        const day = date.toLocaleDateString(undefined, {year: 'numeric', month: 'short', day: 'numeric'});
+        return formatText(_('%s, %s'), day, time);
+    }
+    return time;
 }
 
 // Display-only rows stay reactive (so the theme does not render them as
@@ -193,14 +200,13 @@ class WindowItem extends PopupMenu.PopupBaseMenuItem {
         this._onSelect();
     }
 
-    update(window: UsageWindow | null, mode: PanelPercentageMode, shown: boolean, automatic: boolean): void {
+    update(window: UsageWindow | null, caption: string, mode: PanelPercentageMode, shown: boolean, automatic: boolean): void {
         const percent = displayPercent(window, mode);
         const pressure = pressureClass(window);
         const value = window ? displayLabel(TRANSLATOR, window, mode) : _('Unavailable');
         this._value.set_text(value);
         this._meter.value = percent ?? 0;
         this._meter.visible = percent !== null;
-        const caption = windowCaption(TRANSLATOR, window, dateTimeLabel);
         this._caption.set_text(shown && automatic ? formatText(_('%s · chosen automatically'), caption) : caption);
         for (const actor of [this._meter, this._value]) {
             actor.remove_style_class_name('tokengrill-warning');
@@ -312,7 +318,7 @@ export class ProviderDetail extends PopupMenu.PopupMenuSection {
     }
 
     // Rows are rebuilt only when the set of limits changes, so keyboard focus survives refreshes.
-    private _updateLimits(instance: ProviderInstance, snapshot: ProviderSnapshot | null, mode: PanelPercentageMode): void {
+    private _updateLimits(instance: ProviderInstance, snapshot: ProviderSnapshot | null, runtime: ProviderRuntimeState | null, mode: PanelPercentageMode): void {
         const rows = this._rows(instance, snapshot);
         const keys = JSON.stringify(rows.map(row => [row.key, row.title]));
         if (keys !== this._limitKeys) {
@@ -326,7 +332,11 @@ export class ProviderDetail extends PopupMenu.PopupMenuSection {
             });
         }
         const shown = new Set(shownLimits(instance, snapshot).map(limitKey));
-        rows.forEach((row, index) => this._limits[index]!.update(row.window, mode, shown.has(row.key), instance.topBar.automatic));
+        const now = Date.now();
+        rows.forEach((row, index) => {
+            const caption = windowCaption(TRANSLATOR, row.window, dateTimeLabel, now, snapshot, runtime);
+            this._limits[index]!.update(row.window, caption, mode, shown.has(row.key), instance.topBar.automatic);
+        });
         this._legend.setText(isShown(instance)
             ? _('Checked limits are shown in the top bar')
             : _('Not shown in the top bar. Check a limit to show it.'));
@@ -363,7 +373,7 @@ export class ProviderDetail extends PopupMenu.PopupMenuSection {
         this._identity.setBusy(runtime !== null && runtime.phase !== 'idle');
 
         this._error.setText(errorText(TRANSLATOR, snapshot, instance));
-        this._updateLimits(instance, snapshot, mode);
+        this._updateLimits(instance, snapshot, runtime, mode);
         const balance = snapshot?.balance ?? null;
         this._balance.setText(balance ? formatText(_('%s left · prepaid balance'), formatMoney(balance, 2)) : null);
 

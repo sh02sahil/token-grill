@@ -55,6 +55,17 @@ test('Claude utilization is always percentage points, including values at and be
     assert.equal(windows[1].percent, 0.004);
 });
 
+test('Claude identifies a zero-use session with an explicit null reset as waiting for the next message', () => {
+    const [session, weekly] = normalizeClaudeUsage({five_hour: {utilization: 0, resets_at: null}, seven_day: {utilization: 0, resets_at: null}});
+    assert.equal(session.startsWithNextMessage, true);
+    assert.equal(weekly.startsWithNextMessage, undefined);
+    for (const sessionLimit of [{utilization: 2, resets_at: null}, {utilization: 0}, {utilization: 0, resets_at: 'invalid'}])
+        assert.equal(normalizeClaudeUsage({five_hour: sessionLimit})[0].startsWithNextMessage, undefined);
+
+    const [fallback] = normalizeClaudeUsage({limits: [{group: 'session', percent: 0, resets_at: null, scope: null}]});
+    assert.equal(fallback.startsWithNextMessage, true);
+});
+
 test('Claude limits array fills windows missing from legacy fields', () => {
     const windows = normalizeClaudeUsage({
         five_hour: {utilization: 1.0, resets_at: '2026-10-13T13:00:00.032642+00:00'},

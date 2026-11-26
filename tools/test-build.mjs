@@ -17,6 +17,8 @@ const GI_STUBS = {
             get_home_dir: () => '/home/test',
             get_user_data_dir: () => '/home/test/.local/share',
             uuid_string_random: () => randomUUID(),
+            timeout_add_seconds: (_priority, seconds, callback) => setInterval(callback, seconds * 1000),
+            Source: {remove: id => clearInterval(id)},
         };`,
     'gi://Gio': `
         export default {File: {new_for_path: () => ({query_exists: () => false})}};`,
@@ -48,6 +50,7 @@ const MODULES = [
     ['src/core/popupModel.ts', 'popup-model.mjs'],
     ['src/core/providerMetadata.ts', 'provider-metadata.mjs'],
     ['src/core/providerOrder.ts', 'provider-order.mjs'],
+    ['src/core/scheduler.ts', 'scheduler.mjs'],
     ['src/core/timeMath.ts', 'time-math.mjs'],
     ['src/core/topBar.ts', 'top-bar.mjs'],
     ['src/prefs/providerValidation.ts', 'provider-validation.mjs'],

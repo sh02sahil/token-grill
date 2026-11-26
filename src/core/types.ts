@@ -70,6 +70,7 @@ export interface UsageWindow {
     limit: number | null;
     percent: number | null;
     resetAt: number | null;
+    startsWithNextMessage?: true;
     unit: 'credits' | null;
 }
 

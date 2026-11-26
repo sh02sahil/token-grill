@@ -1,6 +1,7 @@
 import {formatText, type Translator} from './i18n.js';
 
 export interface DurationParts {
+    timestamp: number;
     expired: boolean;
     totalMinutes: number;
     days: number;
@@ -9,11 +10,12 @@ export interface DurationParts {
 }
 
 export function durationUntil(targetAt: number | null, now = Date.now()): DurationParts | null {
-    if (targetAt === null || !Number.isFinite(targetAt))
+    if (targetAt === null || !Number.isFinite(new Date(targetAt).getTime()))
         return null;
     const difference = targetAt - now;
     const remaining = difference > 0 && difference < 60000 ? 0 : Math.max(0, Math.ceil(difference / 60000));
     return {
+        timestamp: targetAt,
         expired: targetAt <= now,
         totalMinutes: remaining,
         days: Math.floor(remaining / 1440),

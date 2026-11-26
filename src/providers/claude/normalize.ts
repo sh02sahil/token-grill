@@ -24,7 +24,8 @@ function scopeName(scope: Record<string, unknown> | null): string | null {
 
 // Claude reports utilization in percentage points (0-100), including
 // fractional values: 1 means 1% used, not a fully consumed ratio.
-function makeWindow(id: string, canonicalWindow: CanonicalQuotaWindow, label: string, percentagePoints: number, reset: unknown): UsageWindow {
+function makeWindow(id: string, canonicalWindow: CanonicalQuotaWindow, label: string, percentagePoints: number, reset: unknown, scoped = false): UsageWindow {
+    const startsWithNextMessage = canonicalWindow === 'five-hour' && !scoped && percentagePoints === 0 && reset === null;
     return {
         id,
         canonicalWindow,
@@ -33,6 +34,7 @@ function makeWindow(id: string, canonicalWindow: CanonicalQuotaWindow, label: st
         limit: null,
         percent: clampFraction(percentagePoints / 100),
         resetAt: toEpochMs(reset),
+        ...(startsWithNextMessage ? {startsWithNextMessage: true} : {}),
         unit: null,
     };
 }
@@ -62,7 +64,7 @@ function limitWindows(limits: unknown, legacyKeys: Set<string>, present: Set<Can
         const kind = stringAt(item, 'kind') ?? group;
         const base = windowLabel(canonicalWindow, kind);
         const id = scope ? `limits:${kind}:${scope}` : `limits:${kind}`;
-        const window = makeWindow(id, canonicalWindow, scope ? `${base} · ${scope}` : base, percent, item.resets_at);
+        const window = makeWindow(id, canonicalWindow, scope ? `${base} · ${scope}` : base, percent, item.resets_at, scope !== null);
         entries.push({canonicalWindow, scope, window});
     }
     const fills = new Map<CanonicalQuotaWindow, Entry>();

@@ -245,10 +245,14 @@ export class Runtime implements IndicatorController {
             this._removeStoredHistory(removed);
         this._providers = next;
         this._ensureActiveProvider();
-        this._scheduler!.setProviders(next);
+        const scheduler = this._scheduler!;
+        scheduler.setProviders(next);
+        const refresh = next.filter(provider => provider.enabled && needsRefresh(before.get(provider.id), provider));
+        for (const provider of refresh)
+            scheduler.clearQuotaResets(provider.id);
         this._render();
         // A rename or a colour from the account page needs no new reading.
-        this._scheduler!.refresh(next.filter(provider => provider.enabled && needsRefresh(before.get(provider.id), provider)).map(provider => provider.id));
+        scheduler.refresh(refresh.map(provider => provider.id));
     }
 
     // Startup and configuration changes refresh silently, so a paused session is not reported as failed.
@@ -348,6 +352,11 @@ export class Runtime implements IndicatorController {
             return;
 
         this._snapshots.set(provider.id, snapshot);
+        if (state.sources.limits === 'success' && snapshot.quotaFetchedAt !== null) {
+            const current = this._providers.find(item => item.id === provider.id);
+            if (current?.enabled && !needsRefresh(provider, current))
+                this._scheduler!.setQuotaResets(provider.id, snapshot.windows, snapshot.quotaFetchedAt);
+        }
         // Sign-in problems end a refresh before any request, so they are recorded here.
         if (snapshot.errorInfo)
             this._record(provider, 'error', `refresh: ${snapshot.errorInfo.code}`);

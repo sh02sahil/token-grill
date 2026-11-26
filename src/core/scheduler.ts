@@ -1,6 +1,7 @@
 import GLib from 'gi://GLib';
 
-import type {ProviderInstance} from './types.js';
+import {durationUntil} from './timeMath.js';
+import type {ProviderInstance, UsageWindow} from './types.js';
 
 export interface SchedulerJob {
     provider: ProviderInstance;
@@ -8,6 +9,7 @@ export interface SchedulerJob {
 }
 
 const WAKE_SECONDS = 15;
+const RESET_DELAY_MS = 30000;
 
 // Providers are spread over the interval on first sight so accounts sharing a
 // service do not all hit it in the same second.
@@ -17,6 +19,7 @@ export class Scheduler {
     private _paused = false;
     private _providers: ProviderInstance[] = [];
     private readonly _due = new Map<string, number>();
+    private readonly _quotaResets = new Map<string, number[]>();
     private readonly _manual = new Set<string>();
 
     constructor(private readonly _callback: (jobs: SchedulerJob[]) => void, private _intervalSeconds: number) {}
@@ -36,11 +39,33 @@ export class Scheduler {
 
     setProviders(providers: ProviderInstance[]): void {
         this._providers = providers;
+        const liveProviders = new Set(providers.filter(provider => provider.enabled && provider.liveUsageEnabled).map(provider => provider.id));
+        for (const id of this._quotaResets.keys()) {
+            if (!liveProviders.has(id))
+                this._quotaResets.delete(id);
+        }
         const now = Date.now();
         for (const provider of providers) {
             if (!this._due.has(provider.id))
                 this._due.set(provider.id, now + Math.random() * this._intervalSeconds * 1000);
         }
+    }
+
+    setQuotaResets(providerId: string, windows: readonly Pick<UsageWindow, 'resetAt'>[], fetchedAt: number): void {
+        const due = new Set<number>();
+        for (const {resetAt} of windows) {
+            const reset = durationUntil(resetAt, fetchedAt);
+            if (reset && reset.timestamp + RESET_DELAY_MS > fetchedAt)
+                due.add(reset.timestamp + RESET_DELAY_MS);
+        }
+        if (due.size)
+            this._quotaResets.set(providerId, [...due].sort((first, second) => first - second));
+        else
+            this.clearQuotaResets(providerId);
+    }
+
+    clearQuotaResets(providerId: string): void {
+        this._quotaResets.delete(providerId);
     }
 
     setPaused(paused: boolean): void {
@@ -70,6 +95,7 @@ export class Scheduler {
             GLib.Source.remove(this._sourceId);
         this._sourceId = null;
         this._due.clear();
+        this._quotaResets.clear();
         this._manual.clear();
         this._providers = [];
     }
@@ -80,8 +106,19 @@ export class Scheduler {
         const now = Date.now();
         const jobs: SchedulerJob[] = [];
         for (const provider of this._providers) {
-            if (!provider.enabled || (this._due.get(provider.id) ?? Infinity) > now)
+            if (!provider.enabled)
                 continue;
+            const resets = this._quotaResets.get(provider.id);
+            const resetDue = resets && resets[0]! <= now;
+            if (!resetDue && (this._due.get(provider.id) ?? Infinity) > now)
+                continue;
+            if (resetDue) {
+                const upcoming = resets.filter(due => due > now);
+                if (upcoming.length)
+                    this._quotaResets.set(provider.id, upcoming);
+                else
+                    this.clearQuotaResets(provider.id);
+            }
             jobs.push({provider, manual: this._manual.delete(provider.id)});
             this._due.set(provider.id, now + this._intervalSeconds * 1000);
         }
