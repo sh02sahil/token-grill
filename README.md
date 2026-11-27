@@ -31,11 +31,17 @@ These are the functions of the top bar and the popup:
   your terminal with the login command of that account, for example
   `codex login` with `CODEX_HOME` set to the home of the account. Token Grill
   does not use the Codex or Claude refresh tokens itself: each is used only
-  once, so a renewal by Token Grill would sign out the CLI.
+  once, so a renewal by Token Grill would sign out the CLI. The renewal
+  settings below let the CLI renew its own sign-in instead.
 - **Renew Expired Claude Code Sign-Ins** in Preferences (General, Updates) is
   off by default. When you turn it on, the service runs the installed
   `claude auth status` for an expired Claude Code sign-in. Claude Code renews
   the sign-in and saves it, and the service reads it again.
+- **Renew Expired Codex Sign-Ins** in Preferences (General, Updates) is off
+  by default. When you turn it on, the service starts the installed Codex app
+  server for an expired Codex CLI sign-in. Codex renews the sign-in and saves
+  it, and the service reads it again. Codex opens no conversation, runs no
+  prompt, and starts no MCP servers.
 - **Renew Expired Antigravity Sign-Ins** in Preferences (General, Updates) is
   off by default. When you turn it on, the service starts the installed agy
   for an expired agy sign-in. agy renews the sign-in and saves it, and the
@@ -227,7 +233,7 @@ the word Antigravity. Thus, the User-Agent names all the services that Token Gri
 monitors.
 
 Token Grill starts no other program by itself, except when you turn on the
-Claude Code renewal or the Antigravity renewal. Only when you click **Sign In Again in a Terminal**, the
+Claude Code, the Codex, or the Antigravity renewal. Only when you click **Sign In Again in a Terminal**, the
 extension opens your terminal with the login command of that account's CLI,
 from a fixed list in the extension. Only when you turn on **Renew Expired
 Claude Code Sign-Ins** in Preferences (it is off by default), the service runs
@@ -249,6 +255,26 @@ Claude Code Sign-Ins** in Preferences (it is off by default), the service runs
 - It applies only to Claude Code files named `.credentials.json`, not to
   OpenCode. The CLI must be on the `PATH` or in `~/.local/bin/claude`. A
   revoked sign-in still needs **Sign In Again in a Terminal**.
+
+Only when you turn on **Renew Expired Codex Sign-Ins** in Preferences (it is
+off by default), the service starts `codex app-server` by itself for an
+expired Codex CLI sign-in:
+
+- The command has no shell and no terminal. `CODEX_HOME` is the folder of the
+  `auth.json` file, so the right account renews. `OPENAI_API_KEY` and
+  `CODEX_API_KEY` are removed, so they cannot select a different sign-in.
+- The service sends the requests `initialize` and `account/read` with
+  `refreshToken`. Codex renews the sign-in and writes its own file. It sends
+  no prompt, opens no conversation, and starts no MCP servers. Its requests do
+  not go through the HTTP client of the service.
+- The command stops after 30 seconds, or when the refresh is cancelled. One
+  `auth.json` file renews at a time. After a failure, the next attempt waits 5
+  minutes, and the wait doubles after each further failure, up to 1 hour.
+  Then the service reads the file again. Only a token that is not expired
+  counts.
+- It applies only to Codex CLI files named `auth.json`, not to OpenCode. The
+  CLI must be on the `PATH` or in `~/.local/bin/codex`. A revoked sign-in
+  still needs **Sign In Again in a Terminal**.
 
 Only when you turn on **Renew Expired Antigravity Sign-Ins** in Preferences (it
 is off by default), the service starts `agy acp` by itself for an expired agy

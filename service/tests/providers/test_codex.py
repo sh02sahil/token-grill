@@ -1,6 +1,8 @@
 import json
+import os
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
@@ -399,3 +401,150 @@ async def test_live_usage_disabled_makes_no_request(tmp_path: Path) -> None:
     ctx = make_ctx(tmp_path, Recorder(), httpx.MockTransport(lambda r: httpx.Response(500)))
     snap = await CodexCollector().collect(make_instance(tmp_path, live=False), empty_snapshot("acct"), ctx)
     assert snap["state"] == "unknown"
+
+
+# --- renewal through the Codex app server
+
+FAKE_CODEX = """#!/usr/bin/env python3
+import json, os, sys
+home = os.environ["CODEX_HOME"]
+log = open(os.environ["FAKE_CODEX_LOG"], "a")
+log.write(json.dumps({"argv": sys.argv[1:], "home": home, "apiKey": os.environ.get("OPENAI_API_KEY")}) + "\\n")
+for line in sys.stdin:
+    message = json.loads(line)
+    log.write(json.dumps({"method": message.get("method"), "params": message.get("params")}) + "\\n")
+    log.flush()
+    if "id" not in message:
+        continue
+    if message["method"] == "account/read" and message["params"].get("refreshToken") and not os.environ.get("FAKE_CODEX_FAIL"):
+        with open(os.path.join(home, "auth.json"), "w") as auth:
+            json.dump({"tokens": {"access_token": os.environ["FAKE_CODEX_TOKEN"], "refresh_token": "new"}}, auth)
+    print(json.dumps({"id": message["id"], "result": {}}), flush=True)
+"""
+
+
+def _install_fake_codex(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    codex = bin_dir / "codex"
+    codex.write_text(FAKE_CODEX)
+    codex.chmod(0o755)
+    log = tmp_path / "codex.log"
+    monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ['PATH']}")
+    monkeypatch.setenv("FAKE_CODEX_LOG", str(log))
+    monkeypatch.setenv("FAKE_CODEX_TOKEN", jwt(FUTURE))
+    monkeypatch.setenv("OPENAI_API_KEY", "inherited")
+    return log
+
+
+def _codex_calls(log: Path) -> list[dict[str, Any]]:
+    return [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
+
+
+def _write_expired(home: Path, refresh: str | None = "old") -> None:
+    home.mkdir(parents=True, exist_ok=True)
+    tokens: dict[str, str] = {"access_token": jwt(1)}
+    if refresh is not None:
+        tokens["refresh_token"] = refresh
+    (home / "auth.json").write_text(json.dumps({"tokens": tokens}))
+
+
+def _renewal_ctx(tmp_path: Path, seen: list[httpx.Request], *, renewal: bool) -> tuple[CollectorContext, list[str]]:
+    steps: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json=USAGE if request.url.path.endswith("/usage") else CREDITS)
+
+    ctx = CollectorContext(
+        http=HttpClient(transport=httpx.MockTransport(handler)),
+        pricing={},
+        aggregates=AggregateStore(tmp_path / "agg.json"),
+        checkpoints=CheckpointStore(tmp_path / "cp.json"),
+        balances=BalanceStore(tmp_path / "balances.json"),
+        on_record=lambda step, detail: steps.append(f"{step}: {detail}"),
+        codex_renewal=renewal,
+    )
+    return ctx, steps
+
+
+async def test_codex_renews_an_expired_sign_in_when_the_user_turned_it_on(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    log = _install_fake_codex(tmp_path, monkeypatch)
+    _write_expired(tmp_path / "home")
+    seen: list[httpx.Request] = []
+    ctx, steps = _renewal_ctx(tmp_path, seen, renewal=True)
+    snap = await CodexCollector().collect(make_instance(tmp_path / "home"), empty_snapshot("acct"), ctx)
+    assert snap["errorInfo"] is None
+    calls = _codex_calls(log)
+    # The account's own home, and no inherited API key that could select another sign-in.
+    assert calls[0] == {"argv": ["app-server"], "home": str(tmp_path / "home"), "apiKey": None}
+    assert [call["method"] for call in calls[1:]] == ["initialize", "initialized", "account/read"]
+    assert calls[3]["params"] == {"refreshToken": True}
+    assert [step for step in steps if step.startswith("sign-in")] == ["sign-in: Codex read its account"]
+    assert seen and all(request.headers["authorization"] == f"Bearer {jwt(FUTURE)}" for request in seen)
+
+
+async def test_codex_is_not_started_when_renewal_is_off(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    log = _install_fake_codex(tmp_path, monkeypatch)
+    _write_expired(tmp_path / "home")
+    ctx, _ = _renewal_ctx(tmp_path, [], renewal=False)
+    snap = await CodexCollector().collect(make_instance(tmp_path / "home"), empty_snapshot("acct"), ctx)
+    assert snap["errorInfo"] is not None
+    assert snap["errorInfo"]["messageId"] == "codex.auth-expired"
+    assert _codex_calls(log) == []
+
+
+async def test_codex_is_not_started_without_a_refresh_token(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    log = _install_fake_codex(tmp_path, monkeypatch)
+    _write_expired(tmp_path / "home", refresh=None)
+    ctx, _ = _renewal_ctx(tmp_path, [], renewal=True)
+    snap = await CodexCollector().collect(make_instance(tmp_path / "home"), empty_snapshot("acct"), ctx)
+    assert snap["errorInfo"] is not None
+    assert snap["errorInfo"]["code"] == "auth-expired"
+    assert _codex_calls(log) == []
+
+
+async def test_a_chosen_auth_file_with_another_name_is_not_renewed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    log = _install_fake_codex(tmp_path, monkeypatch)
+    _write_expired(tmp_path / "home")
+    (tmp_path / "home" / "auth.json").rename(tmp_path / "home" / "work.json")
+    instance: ProviderInstance = {
+        **make_instance(tmp_path / "home"),
+        "authFileOverride": str(tmp_path / "home" / "work.json"),
+    }
+    ctx, _ = _renewal_ctx(tmp_path, [], renewal=True)
+    snap = await CodexCollector().collect(instance, empty_snapshot("acct"), ctx)
+    assert snap["errorInfo"] is not None
+    assert snap["errorInfo"]["code"] == "auth-expired"
+    assert _codex_calls(log) == []
+
+
+async def test_a_failed_codex_renewal_waits_before_the_next_try(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    log = _install_fake_codex(tmp_path, monkeypatch)
+    monkeypatch.setenv("FAKE_CODEX_FAIL", "1")
+    _write_expired(tmp_path / "home")
+    collector = CodexCollector()
+    for _ in range(2):
+        ctx, _ = _renewal_ctx(tmp_path, [], renewal=True)
+        snap = await collector.collect(make_instance(tmp_path / "home"), empty_snapshot("acct"), ctx)
+        assert snap["errorInfo"] is not None
+        assert snap["errorInfo"]["code"] == "auth-expired"
+    assert [call.get("method") for call in _codex_calls(log)].count("account/read") == 1
+
+
+async def test_a_missing_codex_is_an_expired_sign_in(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _install_fake_codex(tmp_path, monkeypatch)
+    monkeypatch.setenv("PATH", str(tmp_path / "empty"))
+    monkeypatch.setattr(Path, "home", lambda: tmp_path / "nohome")
+    _write_expired(tmp_path / "home")
+    ctx, steps = _renewal_ctx(tmp_path, [], renewal=True)
+    snap = await CodexCollector().collect(make_instance(tmp_path / "home"), empty_snapshot("acct"), ctx)
+    assert snap["errorInfo"] is not None
+    assert snap["errorInfo"]["code"] == "auth-expired"
+    assert [step for step in steps if step.startswith("sign-in")] == ["sign-in: Codex could not start"]

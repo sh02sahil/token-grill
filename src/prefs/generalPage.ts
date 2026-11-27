@@ -89,6 +89,12 @@ export class GeneralPage extends Adw.PreferencesPage {
         });
         bindServiceSwitch(context, 'claudeRenewal', renewal);
         updates.add(renewal);
+        const codexRenewal = new Adw.SwitchRow({
+            title: _('Renew Expired Codex Sign-Ins'),
+            subtitle: _('When a sign-in has expired, the service starts the Codex app server so Codex renews it'),
+        });
+        bindServiceSwitch(context, 'codexRenewal', codexRenewal);
+        updates.add(codexRenewal);
         const agyRenewal = new Adw.SwitchRow({
             title: _('Renew Expired Antigravity Sign-Ins'),
             subtitle: _('When the agy sign-in has expired, the service starts agy so it renews the sign-in'),

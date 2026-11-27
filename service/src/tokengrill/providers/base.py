@@ -83,6 +83,7 @@ class CollectorContext:
         history_enabled: bool = True,
         claude_renewal: bool = False,
         antigravity_renewal: bool = False,
+        codex_renewal: bool = False,
     ) -> None:
         self.http = RecordedHttp(http, self.record)
         self.pricing = pricing
@@ -98,6 +99,7 @@ class CollectorContext:
         self.claude_renewal = claude_renewal
         # The user's choice to let the service start agy for an expired agy sign-in.
         self.antigravity_renewal = antigravity_renewal
+        self.codex_renewal = codex_renewal
         self._on_phase = on_phase
         self._on_source = on_source
         self._on_record = on_record

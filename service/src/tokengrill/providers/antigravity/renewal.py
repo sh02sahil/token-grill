@@ -6,11 +6,9 @@ authenticates, without a prompt and without opening a conversation.
 """
 
 import asyncio
-import contextlib
-import json
-import os
-from pathlib import Path
 from time import monotonic
+
+from tokengrill.providers.stdio_rpc import cli_environment, started
 
 RENEWAL_TIMEOUT_SECONDS = 30
 RETRY_SECONDS = 300
@@ -51,59 +49,19 @@ class AgyRenewal:
 def _environment() -> dict[str, str]:
     # Without a display and with a browser that does nothing, a sign-in that cannot be renewed fails
     # instead of opening a browser window the user did not ask for.
-    env = {key: value for key, value in os.environ.items() if key not in ("DISPLAY", "WAYLAND_DISPLAY")}
-    env["BROWSER"] = "true"
-    # D-Bus activation can omit the directory that agy installs itself into.
-    env["PATH"] = os.pathsep.join([*os.get_exec_path(), str(Path.home() / ".local" / "bin")])
-    return env
-
-
-def _request(request_id: int, method: str, params: dict[str, object]) -> bytes:
-    return (json.dumps({"jsonrpc": "2.0", "id": request_id, "method": method, "params": params}) + "\n").encode()
-
-
-async def _reply(stream: asyncio.StreamReader, request_id: int) -> bool:
-    """True when agy answers the request without an error. Notifications before the reply are skipped."""
-    while line := await stream.readline():
-        try:
-            message = json.loads(line)
-        except ValueError:
-            continue
-        if isinstance(message, dict) and message.get("id") == request_id:
-            return "error" not in message
-    return False
+    return cli_environment(drop=("DISPLAY", "WAYLAND_DISPLAY"), BROWSER="true")
 
 
 async def _run_acp(method_id: str) -> str:
     try:
-        process = await asyncio.create_subprocess_exec(
-            "agy",
-            "acp",
-            cwd="/",
-            env=_environment(),
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.DEVNULL,
-        )
-    except OSError:
-        return "agy could not start"
-    assert process.stdin is not None and process.stdout is not None
-    try:
-        async with asyncio.timeout(RENEWAL_TIMEOUT_SECONDS):
-            process.stdin.write(_request(1, "initialize", {"protocolVersion": 1, "clientCapabilities": {}}))
-            await process.stdin.drain()
-            if not await _reply(process.stdout, 1):
+        async with started(("agy", "acp"), _environment()) as agy, asyncio.timeout(RENEWAL_TIMEOUT_SECONDS):
+            if not await agy.request(1, "initialize", {"protocolVersion": 1, "clientCapabilities": {}}):
                 return "agy did not initialize"
-            process.stdin.write(_request(2, "authenticate", {"methodId": method_id}))
-            await process.stdin.drain()
-            return "agy renewed its sign-in" if await _reply(process.stdout, 2) else "agy could not renew its sign-in"
+            renewed = await agy.request(2, "authenticate", {"methodId": method_id})
+            return "agy renewed its sign-in" if renewed else "agy could not renew its sign-in"
     except TimeoutError:
         return "agy timed out"
     except (BrokenPipeError, ConnectionResetError):
         return "agy exited early"
-    finally:
-        if process.returncode is None:
-            # The child can exit between the returncode check and the signal.
-            with contextlib.suppress(ProcessLookupError):
-                process.kill()
-        await process.wait()
+    except OSError:
+        return "agy could not start"

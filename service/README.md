@@ -82,6 +82,14 @@ requests `initialize` and `authenticate`. agy renews the sign-in and saves it
 in the keyring, and the service reads it again. It stops agy after 30 seconds,
 with the same waits after a failure.
 
+The setting `codexRenewal` is off by default. Turn it on in the extension
+Preferences: **Renew Expired Codex Sign-Ins** (General, Updates). Then, for an
+expired Codex CLI sign-in, the service starts the installed `codex app-server`
+with `CODEX_HOME` set to the folder of the `auth.json` file and sends the
+requests `initialize` and `account/read` with `refreshToken`. Codex renews the
+sign-in and writes its own file, and the service reads it again. It stops
+Codex after 30 seconds, with the same waits after a failure.
+
 The service's HTTP client sends a credential only to its own service, over HTTPS,
 with no redirects, and only to the hosts in the table in the
 [main README](https://github.com/sh02sahil/token-grill/blob/main/README.md#privacy-and-network-access). It has no telemetry.

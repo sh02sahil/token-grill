@@ -323,6 +323,7 @@ def test_missing_config_gives_the_defaults(tmp_path: Path) -> None:
         "journalDiagnostics": False,
         "claudeRenewal": False,
         "antigravityRenewal": False,
+        "codexRenewal": False,
     }
     assert DEFAULT_STEP_PERCENT == 10
 

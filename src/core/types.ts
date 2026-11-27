@@ -184,6 +184,7 @@ export interface Settings {
     journalDiagnostics: boolean;
     claudeRenewal: boolean;
     antigravityRenewal: boolean;
+    codexRenewal: boolean;
 }
 
 export interface ServiceState {

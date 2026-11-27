@@ -216,6 +216,7 @@ class Settings(TypedDict):
     journalDiagnostics: bool
     claudeRenewal: bool
     antigravityRenewal: bool
+    codexRenewal: bool
 
 
 class ServiceState(TypedDict):

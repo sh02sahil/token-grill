@@ -96,6 +96,7 @@ def default_settings() -> Settings:
         "journalDiagnostics": False,
         "claudeRenewal": False,
         "antigravityRenewal": False,
+        "codexRenewal": False,
     }
 
 
@@ -385,6 +386,7 @@ def _settings_from(source: dict[str, Any]) -> Settings:
         "journalDiagnostics": source.get("journalDiagnostics") is True,
         "claudeRenewal": source.get("claudeRenewal") is True,
         "antigravityRenewal": source.get("antigravityRenewal") is True,
+        "codexRenewal": source.get("codexRenewal") is True,
     }
 
 
@@ -401,7 +403,7 @@ def apply_settings_patch(current: Settings, patch: object) -> Settings:
         value = merged[key]
         if not (isinstance(value, int) and not isinstance(value, bool) and bounds[0] <= value <= bounds[1]):
             raise InvalidRequest(f"{key} must be a whole number from {bounds[0]} to {bounds[1]}")
-    for key in ("alertsEnabled", "journalDiagnostics", "claudeRenewal", "antigravityRenewal"):
+    for key in ("alertsEnabled", "journalDiagnostics", "claudeRenewal", "antigravityRenewal", "codexRenewal"):
         if not isinstance(merged[key], bool):
             raise InvalidRequest(f"{key} must be true or false")
     return _settings_from(merged)

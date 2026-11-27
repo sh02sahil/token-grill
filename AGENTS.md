@@ -244,7 +244,9 @@ Rules for the service (network and data):
   the CLI keeps the old one, so a refresh by Token Grill signs the CLI out.
   Only if the user turned on `claudeRenewal`, the service runs
   `claude auth status` for an expired Claude Code sign-in and reads the file
-  again (SV-5). Do not refresh a Kiro token either: AWS SSO-OIDC replaces
+  again, and only if the user turned on `codexRenewal`, the service starts
+  `codex app-server` and asks it for the account with `refreshToken` (SV-5).
+  Do not refresh a Kiro token either: AWS SSO-OIDC replaces
   the refresh token, and kiro-cli deletes its sign-in when its own refresh is
   then rejected. Antigravity (Google) tokens can be refreshed in memory. The
   agy keyring token has no client that Token Grill can use: only if the user
@@ -357,6 +359,18 @@ same.
   after 30 s or on cancellation, and a failure makes the next attempt wait
   longer, from 5 minutes up to 1 hour. Only the agy sign-in kind `consumer`
   is renewed, through the method `oauth-personal`; others stay expired.
+
+- **The service starts `codex app-server` for an expired Codex CLI sign-in.**
+  It does this only if the user turned on the setting `codexRenewal` ("Renew
+  Expired Codex Sign-Ins" in Preferences). It is off by default. The Codex
+  refresh token is single-use, so only Codex may spend it. The service sends
+  the requests `initialize` and `account/read` with `refreshToken`
+  (`providers/codex/renewal.py`). Codex renews the sign-in and writes its own
+  `auth.json`, with no prompt, no conversation, and no MCP server. The argv is
+  fixed, no shell parses it, `CODEX_HOME` is the folder of the `auth.json`
+  file, and `OPENAI_API_KEY` and `CODEX_API_KEY` are removed. One file renews
+  at a time. It stops after 30 s or on cancellation, and a failure makes the
+  next attempt wait longer, from 5 minutes up to 1 hour.
 
 - **The Copy buttons write a fixed setup command to the clipboard.** The popup
   (`shell/serviceCard.ts`) calls `St.Clipboard.set_text()`. The preferences

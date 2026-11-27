@@ -3,9 +3,9 @@
 from tokengrill.core.errors import ServiceError
 from tokengrill.core.types import LimitResetCreditSummary, ProviderInstance, ProviderSnapshot
 from tokengrill.providers.base import CollectorContext, LimitsUpdate, collect_history, collect_limits
-from tokengrill.providers.codex.auth import load_codex_access_token
 from tokengrill.providers.codex.history import codex_usage_event
 from tokengrill.providers.codex.normalize import normalize_codex_usage
+from tokengrill.providers.codex.renewal import CodexTokenLoader
 from tokengrill.providers.codex.reset_credits import normalize_reset_credits
 
 USAGE_URL = "https://chatgpt.com/backend-api/wham/usage"
@@ -17,6 +17,9 @@ def _headers(access_token: str) -> dict[str, str]:
 
 
 class CodexCollector:
+    def __init__(self) -> None:
+        self._tokens = CodexTokenLoader()
+
     async def collect(
         self, instance: ProviderInstance, snapshot: ProviderSnapshot, ctx: CollectorContext
     ) -> ProviderSnapshot:
@@ -33,7 +36,7 @@ class CodexCollector:
         tokens: list[str] = []
 
         async def fetch() -> LimitsUpdate:
-            access_token = await load_codex_access_token(instance)
+            access_token = await self._tokens.load(instance, ctx)
             usage = normalize_codex_usage(await ctx.http.request_json("GET", USAGE_URL, _headers(access_token)))
             if not usage["windows"]:
                 raise ServiceError("response-shape", "net.no-usage")

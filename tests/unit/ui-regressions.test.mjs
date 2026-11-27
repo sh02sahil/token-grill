@@ -252,6 +252,7 @@ test('Preferences read and write the moved settings through the service', async 
     assert.match(general, /bindServiceSwitch\(context, 'claudeRenewal', renewal\)/);
     // The same for agy, which the service starts only when the user turned this on.
     assert.match(general, /bindServiceSwitch\(context, 'antigravityRenewal', agyRenewal\)/);
+    assert.match(general, /bindServiceSwitch\(context, 'codexRenewal', codexRenewal\)/);
     assert.match(widgets, /client => client\.setSettings\(patch\)/);
     // The look stays in GSettings.
     for (const key of ['panel-display-style', 'panel-percentage-mode', 'panel-position', 'popup-account-picker'])

@@ -59,6 +59,13 @@
   hours.
 - `tokengrill uninstall --purge` names each folder that it could not delete
   and exits with an error, instead of reporting that everything is deleted.
+- Codex: Preferences -> General -> Renew Expired Codex Sign-Ins (the service
+  setting `codexRenewal`) is off by default. When you turn it on and a Codex
+  CLI sign-in has expired, the service starts the installed Codex app server
+  for that account and asks it for the account. Codex renews the sign-in and
+  saves it, and the service reads it again. Codex opens no conversation and
+  runs no prompt. After a failure, the next attempt waits 5 minutes, and the
+  wait doubles up to 1 hour.
 - Kiro: Token Grill no longer renews an expired `kiro-cli` sign-in itself.
   AWS replaces the refresh token at each renewal, so a renewal by Token Grill
   could sign `kiro-cli` out. When the popup shows that the sign-in has
