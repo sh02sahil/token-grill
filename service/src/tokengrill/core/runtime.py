@@ -476,6 +476,7 @@ class Runtime:
             "alertStepPercent": config["alertStepPercent"],
             "journalDiagnostics": config["journalDiagnostics"],
             "claudeRenewal": config["claudeRenewal"],
+            "antigravityRenewal": config["antigravityRenewal"],
         }
 
     def _interval_seconds(self) -> int:
@@ -561,6 +562,7 @@ class Runtime:
             manual=manual,
             history_enabled=self._shell_connected,
             claude_renewal=self._settings()["claudeRenewal"],
+            antigravity_renewal=self._settings()["antigravityRenewal"],
         )
         self._record(instance, "sign-in", self._sign_in_source(instance))
         previous = self._snapshots.get(account_id)

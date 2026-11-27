@@ -19,6 +19,7 @@ from tokengrill.providers.antigravity.endpoints import (
     RETRIEVE_USER_QUOTA_SUMMARY_URL,
 )
 from tokengrill.providers.antigravity.normalize import antigravity_plan, normalize_quota_summary
+from tokengrill.providers.antigravity.renewal import AgyRenewal
 from tokengrill.providers.base import CollectorContext, LimitsUpdate, collect_limits
 
 
@@ -33,6 +34,7 @@ class AntigravityCollector:
         # Tokens refreshed here, so the stored refresh token is not used on every pass. Kept in memory
         # only: no file or keyring item is ever written.
         self._refreshed: dict[str, AntigravityAuth] = {}
+        self._renewal = AgyRenewal()
 
     async def collect(
         self, instance: ProviderInstance, snapshot: ProviderSnapshot, ctx: CollectorContext
@@ -88,6 +90,8 @@ class AntigravityCollector:
         if is_antigravity_token_fresh(stored):
             return stored
         if not is_antigravity_refreshable(stored):
+            if stored.source == "keyring" and ctx.antigravity_renewal and self._renewal.can_renew(stored.auth_method):
+                return await self._renewed(instance, ctx, stored)
             raise _auth_expired(stored)
         try:
             payload = await ctx.http.request_json(
@@ -112,3 +116,16 @@ class AntigravityCollector:
         auth = replace(stored, access_token=access_token, expires_at=time.time() * 1000 + expires_in * 1000)
         self._refreshed[instance["id"]] = auth
         return auth
+
+    async def _renewed(
+        self, instance: ProviderInstance, ctx: CollectorContext, stored: AntigravityAuth
+    ) -> AntigravityAuth:
+        """Only when the user turned it on: agy renews its own keyring sign-in, which is then read again."""
+        assert stored.auth_method is not None
+        ctx.record("sign-in", await self._renewal.renew(stored.auth_method))
+        renewed = await resolve_antigravity_auth(instance)
+        if renewed.source == "keyring" and is_antigravity_token_fresh(renewed):
+            self._renewal.succeeded()
+            return renewed
+        self._renewal.failed()
+        raise _auth_expired(stored)

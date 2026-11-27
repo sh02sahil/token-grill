@@ -1,7 +1,7 @@
 export const SERVICE_NAME = 'io.github.sh02sahil.TokenGrill';
 export const OBJECT_PATH = '/io/github/sh02sahil/TokenGrill';
 export const INTERFACE_NAME = 'io.github.sh02sahil.TokenGrill1';
-export const MIN_API_VERSION = 3;
+export const MIN_API_VERSION = 4;
 
 // The same text as service/src/tokengrill/dbus/interface.xml; a test compares them.
 export const INTERFACE_XML = `<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"

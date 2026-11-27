@@ -77,7 +77,7 @@ export function presentKeyError(parent: Gtk.Widget): void {
 }
 
 type NumberSetting = 'refreshIntervalSeconds' | 'alertStepPercent';
-type SwitchSetting = 'alertsEnabled' | 'claudeRenewal';
+type SwitchSetting = 'alertsEnabled' | 'claudeRenewal' | 'antigravityRenewal';
 
 // A setting that the service keeps: the row follows the service, and a change the user makes is
 // sent to it. A refused change puts the row back.

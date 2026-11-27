@@ -3,7 +3,7 @@ from tokengrill.cli import main
 
 def test_version_prints_package_and_api(capsys):
     assert main(["version"]) == 0
-    assert capsys.readouterr().out == "tokengrill 0.1.3 (D-Bus API 3)\n"
+    assert capsys.readouterr().out == "tokengrill 0.1.4 (D-Bus API 4)\n"
 
 
 def test_unknown_command_fails():

@@ -26,6 +26,7 @@ class AntigravityAuth:
     refresh_token: str | None
     access_token: str | None
     expires_at: int | float | None
+    auth_method: str | None = None
 
 
 def is_antigravity_refreshable(auth: AntigravityAuth) -> bool:
@@ -76,6 +77,7 @@ async def _load_keyring_auth() -> AntigravityAuth | None:
         refresh_token=token["refreshToken"],
         access_token=token["accessToken"],
         expires_at=token["expiresAt"],
+        auth_method=token["authMethod"],
     )
 
 

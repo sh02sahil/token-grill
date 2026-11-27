@@ -1,4 +1,5 @@
 import json
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -80,6 +81,7 @@ def test_cli_keyring_payload_parses_the_agy_token_envelope() -> None:
         "accessToken": "ya29.access-token-value",
         "refreshToken": "1//refresh-token-value",
         "expiresAt": _ms("2026-09-14T16:19:50.679+00:00"),
+        "authMethod": "consumer",
     }
 
 
@@ -568,3 +570,159 @@ def test_the_registry_creates_an_antigravity_collector() -> None:
 
 def test_module_exports_are_wired() -> None:
     assert auth_module.TOKEN_SKEW_MS == 60 * 1000
+
+
+# The shape of a real retrieveUserQuotaSummary response that has one "All Models" group with model
+# buckets and no `window` (key names as observed; the values are synthetic).
+MODEL_BUCKETS = {
+    "description": "View your available model quota.",
+    "groups": [
+        {
+            "displayName": "All Models",
+            "description": "Each pool has a per-week and a per-5-hour cap; this shows the one closest to being reached.",
+            "buckets": [
+                {
+                    "bucketId": "claude-sonnet-4-6",
+                    "displayName": "Claude Sonnet 4.6 (Thinking)",
+                    "resetTime": "2030-01-07T03:00:00Z",
+                    "description": "Quota resets in 6 days, 3 hours.",
+                    "remainingFraction": 0,
+                },
+                {
+                    "bucketId": "gpt-oss-120b-medium",
+                    "displayName": "GPT-OSS 120B (Medium)",
+                    "resetTime": "2030-01-01T04:00:00Z",
+                    "description": "Quota resets in 4 hours.",
+                    "remainingFraction": 0.75,
+                },
+            ],
+        }
+    ],
+}
+
+
+def test_model_buckets_without_a_window_are_limits_of_their_own_with_no_pace() -> None:
+    windows = normalize_quota_summary(MODEL_BUCKETS)
+    assert [(w["id"], w["label"], w["canonicalWindow"], w["percent"], w["durationSeconds"]) for w in windows] == [
+        ("model:claude-sonnet-4-6", "Claude Sonnet 4.6 (Thinking)", "other", 1, None),
+        ("model:gpt-oss-120b-medium", "GPT-OSS 120B (Medium)", "other", 0.25, None),
+    ]
+    assert windows[0]["resetAt"] == 1_893_985_200_000
+
+
+FAKE_AGY = """#!/usr/bin/env python3
+import json, os, sys
+state = os.environ["FAKE_AGY_STATE"]
+with open(state + ".calls", "a") as calls:
+    calls.write(json.dumps({"argv": sys.argv[1:], "display": os.environ.get("DISPLAY"),
+                            "browser": os.environ.get("BROWSER")}) + "\\n")
+for line in sys.stdin:
+    request = json.loads(line)
+    with open(state + ".calls", "a") as calls:
+        calls.write(json.dumps({"method": request["method"], "params": request["params"]}) + "\\n")
+    if request["method"] == "authenticate" and os.environ.get("FAKE_AGY_FAIL"):
+        print(json.dumps({"jsonrpc": "2.0", "id": request["id"], "error": {"code": -32000, "message": "no"}}), flush=True)
+        continue
+    if request["method"] == "authenticate":
+        open(state + ".renewed", "w").close()
+    print(json.dumps({"jsonrpc": "2.0", "method": "session/update", "params": {}}), flush=True)
+    print(json.dumps({"jsonrpc": "2.0", "id": request["id"], "result": {}}), flush=True)
+"""
+
+
+def _agy_ctx(tmp_path: Path, seen: list[httpx.Request], *, renewal: bool) -> CollectorContext:
+    return CollectorContext(
+        http=HttpClient(transport=httpx.MockTransport(quota_handler(seen))),
+        pricing={},
+        aggregates=AggregateStore(tmp_path / "agg.json"),
+        checkpoints=CheckpointStore(tmp_path / "cp.json"),
+        balances=BalanceStore(tmp_path / "balances.json"),
+        antigravity_renewal=renewal,
+    )
+
+
+def _install_fake_agy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, auth_method: str = "consumer") -> Path:
+    """A fake agy on PATH and a fake keyring whose token agy renews."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    agy = bin_dir / "agy"
+    agy.write_text(FAKE_AGY)
+    agy.chmod(0o755)
+    state = tmp_path / "agy"
+    monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ['PATH']}")
+    monkeypatch.setenv("FAKE_AGY_STATE", str(state))
+    monkeypatch.setenv("DISPLAY", ":0")
+
+    async def lookup(schema: str, attributes: dict[str, str], unavailable_id: str) -> str | None:
+        expires = FUTURE_MS if (tmp_path / "agy.renewed").exists() else PAST_MS
+        payload = json.loads(keyring_payload(access="renewed" if expires == FUTURE_MS else "old", expires_ms=expires))
+        payload["auth_method"] = auth_method
+        return json.dumps(payload)
+
+    monkeypatch.setattr(keyring_auth, "lookup_secret", lookup)
+    return state
+
+
+def _agy_calls(state: Path) -> list[dict[str, Any]]:
+    path = Path(str(state) + ".calls")
+    return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+
+
+async def test_agy_renews_an_expired_keyring_sign_in_when_the_user_turned_it_on(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    state = _install_fake_agy(tmp_path, monkeypatch)
+    seen: list[httpx.Request] = []
+    snap = await AntigravityCollector().collect(
+        make_instance(tmp_path / "none"), empty_snapshot("acct"), _agy_ctx(tmp_path, seen, renewal=True)
+    )
+    assert snap["errorInfo"] is None
+    calls = _agy_calls(state)
+    assert calls[0] == {"argv": ["acp"], "display": None, "browser": "true"}
+    assert [call["method"] for call in calls[1:]] == ["initialize", "authenticate"]
+    assert calls[2]["params"] == {"methodId": "oauth-personal"}
+    assert all(request.headers["authorization"] == "Bearer renewed" for request in seen)
+
+
+async def test_agy_is_not_started_when_renewal_is_off(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    state = _install_fake_agy(tmp_path, monkeypatch)
+    snap = await AntigravityCollector().collect(
+        make_instance(tmp_path / "none"), empty_snapshot("acct"), _agy_ctx(tmp_path, [], renewal=False)
+    )
+    assert snap["errorInfo"] is not None
+    assert snap["errorInfo"]["messageId"] == "antigravity.agy-expired"
+    assert _agy_calls(state) == []
+
+
+async def test_agy_is_not_started_for_an_unknown_sign_in_kind(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    state = _install_fake_agy(tmp_path, monkeypatch, auth_method="enterprise")
+    snap = await AntigravityCollector().collect(
+        make_instance(tmp_path / "none"), empty_snapshot("acct"), _agy_ctx(tmp_path, [], renewal=True)
+    )
+    assert snap["errorInfo"] is not None
+    assert snap["errorInfo"]["messageId"] == "antigravity.agy-expired"
+    assert _agy_calls(state) == []
+
+
+async def test_a_failed_agy_renewal_waits_before_the_next_try(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    state = _install_fake_agy(tmp_path, monkeypatch)
+    monkeypatch.setenv("FAKE_AGY_FAIL", "1")
+    collector = AntigravityCollector()
+    for _ in range(2):
+        snap = await collector.collect(
+            make_instance(tmp_path / "none"), empty_snapshot("acct"), _agy_ctx(tmp_path, [], renewal=True)
+        )
+        assert snap["errorInfo"] is not None
+        assert snap["errorInfo"]["messageId"] == "antigravity.agy-expired"
+    assert [call.get("method") for call in _agy_calls(state)].count("authenticate") == 1
+
+
+async def test_a_missing_agy_is_an_expired_sign_in(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _install_fake_agy(tmp_path, monkeypatch)
+    monkeypatch.setenv("PATH", str(tmp_path / "empty"))
+    monkeypatch.setattr(Path, "home", lambda: tmp_path / "nohome")
+    snap = await AntigravityCollector().collect(
+        make_instance(tmp_path / "none"), empty_snapshot("acct"), _agy_ctx(tmp_path, [], renewal=True)
+    )
+    assert snap["errorInfo"] is not None
+    assert snap["errorInfo"]["messageId"] == "antigravity.agy-expired"

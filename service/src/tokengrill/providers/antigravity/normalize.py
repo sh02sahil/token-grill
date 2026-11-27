@@ -3,6 +3,7 @@
 from typing import Any, TypedDict
 
 from tokengrill.core.json_util import clamp_fraction, is_record, number_at, record_at, string_at, to_epoch_ms
+from tokengrill.core.limits import MAX_LISTED
 from tokengrill.core.types import CanonicalQuotaWindow, UsageWindow
 from tokengrill.providers.windows import named_length, window_label
 
@@ -22,29 +23,54 @@ def antigravity_plan(payload: object) -> str | None:
     return string_at(tier, "name") if tier else None
 
 
+def _model_window(bucket: dict[str, Any]) -> UsageWindow | None:
+    """A summary may have one "All Models" group with a bucket for each model and no `window`: the group
+    says that each bucket shows whichever of its pool's five-hour and weekly caps is closest. The window
+    is not named, so the bucket is a limit of its own, with no length and so no pace."""
+    bucket_id = string_at(bucket, "bucketId")
+    remaining = number_at(bucket, "remainingFraction")
+    if bucket_id is None or remaining is None:
+        return None
+    reset = to_epoch_ms(bucket.get("resetTime"))
+    return {
+        "id": f"model:{bucket_id}",
+        "canonicalWindow": "other",
+        "label": string_at(bucket, "displayName") or bucket_id,
+        "used": None,
+        "limit": None,
+        "percent": 1 - clamp_fraction(remaining),
+        "resetAt": None if reset is None else int(reset),
+        "durationSeconds": None,
+        "unit": None,
+        "pace": None,
+    }
+
+
+def _buckets(payload: object) -> list[dict[str, Any]]:
+    groups = payload.get("groups") if is_record(payload) else None
+    found: list[dict[str, Any]] = []
+    for group in groups if isinstance(groups, list) else []:
+        items: Any = group.get("buckets") if is_record(group) else None
+        found.extend(bucket for bucket in (items if isinstance(items, list) else []) if is_record(bucket))
+    return found
+
+
 def extract_quota_summary_buckets(payload: object) -> list[QuotaSummaryBucket]:
     """retrieveUserQuotaSummary groups models (Gemini, Claude and GPT) and gives each group its own
     five-hour and weekly bucket."""
-    groups = payload.get("groups") if is_record(payload) else None
     buckets: list[QuotaSummaryBucket] = []
-    for group in groups if isinstance(groups, list) else []:
-        if not is_record(group):
-            continue
-        items: Any = group.get("buckets")
-        for bucket in items if isinstance(items, list) else []:
-            if not is_record(bucket):
-                continue
-            canonical = _BUCKET_WINDOWS.get(string_at(bucket, "window") or "")
-            remaining = number_at(bucket, "remainingFraction")
-            reset = to_epoch_ms(bucket.get("resetTime"))
-            if canonical and remaining is not None:
-                buckets.append(
-                    {
-                        "canonicalWindow": canonical,
-                        "remainingFraction": clamp_fraction(remaining),
-                        "resetAt": None if reset is None else int(reset),
-                    }
-                )
+    for bucket in _buckets(payload):
+        canonical = _BUCKET_WINDOWS.get(string_at(bucket, "window") or "")
+        remaining = number_at(bucket, "remainingFraction")
+        reset = to_epoch_ms(bucket.get("resetTime"))
+        if canonical and remaining is not None:
+            buckets.append(
+                {
+                    "canonicalWindow": canonical,
+                    "remainingFraction": clamp_fraction(remaining),
+                    "resetAt": None if reset is None else int(reset),
+                }
+            )
     return buckets
 
 
@@ -65,7 +91,7 @@ def normalize_quota_summary(payload: object) -> list[UsageWindow]:
     for bucket in extract_quota_summary_buckets(payload):
         current = tightest.get(bucket["canonicalWindow"])
         tightest[bucket["canonicalWindow"]] = _tighter(current, bucket) if current else bucket
-    return [
+    named: list[UsageWindow] = [
         {
             "id": bucket["canonicalWindow"],
             "canonicalWindow": bucket["canonicalWindow"],
@@ -81,3 +107,7 @@ def normalize_quota_summary(payload: object) -> list[UsageWindow]:
         }
         for bucket in tightest.values()
     ]
+    if named:
+        return named
+    models = [window for window in (_model_window(b) for b in _buckets(payload) if "window" not in b) if window]
+    return models[:MAX_LISTED]

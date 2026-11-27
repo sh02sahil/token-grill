@@ -36,7 +36,7 @@ test('a payload the client cannot read is too old', () => {
 
 const state = extra => JSON.stringify({
     schema: 1, apiVersion: 1, serviceVersion: '0.5.0', paused: false,
-    settings: {refreshIntervalSeconds: 300, alertsEnabled: true, alertStepPercent: 10, journalDiagnostics: false, claudeRenewal: false},
+    settings: {refreshIntervalSeconds: 300, alertsEnabled: true, alertStepPercent: 10, journalDiagnostics: false, claudeRenewal: false, antigravityRenewal: false},
     accounts: [], snapshots: {}, runtime: {}, ...extra,
 });
 

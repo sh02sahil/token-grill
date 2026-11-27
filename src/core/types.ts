@@ -183,6 +183,7 @@ export interface Settings {
     alertStepPercent: number;
     journalDiagnostics: boolean;
     claudeRenewal: boolean;
+    antigravityRenewal: boolean;
 }
 
 export interface ServiceState {

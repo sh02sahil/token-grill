@@ -95,6 +95,7 @@ def default_settings() -> Settings:
         "alertStepPercent": DEFAULT_STEP_PERCENT,
         "journalDiagnostics": False,
         "claudeRenewal": False,
+        "antigravityRenewal": False,
     }
 
 
@@ -383,6 +384,7 @@ def _settings_from(source: dict[str, Any]) -> Settings:
         "alertStepPercent": _bounded_int(source.get("alertStepPercent"), _STEP_RANGE, defaults["alertStepPercent"]),
         "journalDiagnostics": source.get("journalDiagnostics") is True,
         "claudeRenewal": source.get("claudeRenewal") is True,
+        "antigravityRenewal": source.get("antigravityRenewal") is True,
     }
 
 
@@ -399,7 +401,7 @@ def apply_settings_patch(current: Settings, patch: object) -> Settings:
         value = merged[key]
         if not (isinstance(value, int) and not isinstance(value, bool) and bounds[0] <= value <= bounds[1]):
             raise InvalidRequest(f"{key} must be a whole number from {bounds[0]} to {bounds[1]}")
-    for key in ("alertsEnabled", "journalDiagnostics", "claudeRenewal"):
+    for key in ("alertsEnabled", "journalDiagnostics", "claudeRenewal", "antigravityRenewal"):
         if not isinstance(merged[key], bool):
             raise InvalidRequest(f"{key} must be true or false")
     return _settings_from(merged)

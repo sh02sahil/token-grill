@@ -14,6 +14,8 @@ class AgyKeyringToken(TypedDict):
     accessToken: str
     refreshToken: str | None
     expiresAt: int | float | None
+    # How agy signed in, such as "consumer"; the renewal needs the matching sign-in method of agy.
+    authMethod: str | None
 
 
 def parse_agy_keyring_payload(raw: str) -> AgyKeyringToken | None:
@@ -28,4 +30,5 @@ def parse_agy_keyring_payload(raw: str) -> AgyKeyringToken | None:
         "accessToken": access_token,
         "refreshToken": string_at(token, "refresh_token"),
         "expiresAt": to_epoch_ms(expiry) if expiry else None,
+        "authMethod": string_at(payload, "auth_method") if payload else None,
     }

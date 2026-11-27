@@ -89,6 +89,12 @@ export class GeneralPage extends Adw.PreferencesPage {
         });
         bindServiceSwitch(context, 'claudeRenewal', renewal);
         updates.add(renewal);
+        const agyRenewal = new Adw.SwitchRow({
+            title: _('Renew Expired Antigravity Sign-Ins'),
+            subtitle: _('When the agy sign-in has expired, the service starts agy so it renews the sign-in'),
+        });
+        bindServiceSwitch(context, 'antigravityRenewal', agyRenewal);
+        updates.add(agyRenewal);
         const more = new Adw.ExpanderRow({title: _('More Options')});
         more.add_row(toggleRow(settings, {
             key: 'popup-account-picker',
