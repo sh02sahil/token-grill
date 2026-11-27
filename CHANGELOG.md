@@ -59,6 +59,38 @@
   hours.
 - `tokengrill uninstall --purge` names each folder that it could not delete
   and exits with an error, instead of reporting that everything is deleted.
+- Kiro: Token Grill no longer renews an expired `kiro-cli` sign-in itself.
+  AWS replaces the refresh token at each renewal, so a renewal by Token Grill
+  could sign `kiro-cli` out. When the popup shows that the sign-in has
+  expired, use `kiro-cli`, or sign in again with `kiro-cli login`.
+- Antigravity: Preferences -> General -> Renew Expired Antigravity Sign-Ins
+  (the service setting `antigravityRenewal`) is off by default. When you turn
+  it on and the agy sign-in has expired, the service starts the installed agy
+  in the background and asks it to renew its sign-in. You no longer need to
+  open agy in a terminal for that. agy opens no conversation and runs no
+  prompt, but it starts the MCP servers that you set up in agy.
+- Antigravity: the usage service now sends a limit for each model instead of
+  the five-hour and weekly limits. Token Grill shows each model as its own
+  limit. Before, the refresh failed with "The service response did not
+  contain any usage limits".
+- Security fixes from an audit of 0.5.0:
+  - Sign In Again in a Terminal: a `%` in the name of an account folder can
+    no longer change the command that the terminal runs.
+  - Preferences show account names, limit names and folder names as plain
+    text. Before, a name with `&` or `<` showed as an empty row, and a limit
+    name from a service could add a link.
+  - `tokengrill status` prints a control character from a service, such as a
+    terminal escape sequence, as `?`.
+  - A service response with very large numbers or very long lists can no
+    longer stop the service at start, make the state of all accounts
+    unreadable, or slow down the top bar. The service cuts such values when
+    it reads them.
+  - The Diagnostics Report names only the kind of place that a sign-in came
+    from, such as "other folder", and no longer the folder or file.
+  - When you remove or disable an account, or turn off Live Quota, during a
+    refresh, the service no longer reads that account once more.
+  - A session log line that the service cannot read is skipped, and the
+    refresh of the account continues.
 
 ## 0.4.1
 

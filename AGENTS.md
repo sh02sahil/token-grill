@@ -222,7 +222,7 @@ Rules for text:
 Rules for the service (network and data):
 
 - Use only the hosts in `service/src/tokengrill/net/http.py`
-  (`ALLOWED_HOSTS` and the Kiro OIDC pattern). Use only HTTPS, accept no
+  (`ALLOWED_HOSTS`). Use only HTTPS, accept no
   redirects, reject a response over 1 MiB, and stop a request after 30 s.
 
 - Use one User-Agent (`USER_AGENT`). Set it on the HTTP client. Do not set a
@@ -244,7 +244,12 @@ Rules for the service (network and data):
   the CLI keeps the old one, so a refresh by Token Grill signs the CLI out.
   Only if the user turned on `claudeRenewal`, the service runs
   `claude auth status` for an expired Claude Code sign-in and reads the file
-  again (SV-5). Kiro and Antigravity tokens can be refreshed in memory.
+  again (SV-5). Do not refresh a Kiro token either: AWS SSO-OIDC replaces
+  the refresh token, and kiro-cli deletes its sign-in when its own refresh is
+  then rejected. Antigravity (Google) tokens can be refreshed in memory. The
+  agy keyring token has no client that Token Grill can use: only if the user
+  turned on `antigravityRenewal`, the service starts `agy acp` and asks it to
+  authenticate (SV-5).
 
 - Usage pace needs `UsageWindow.durationSeconds`. Take it from what the
   service reports: a duration field (Codex), the window's own name, such as
@@ -339,6 +344,19 @@ same.
   is discarded, and the command stops after 30 s or on cancellation. One
   credentials file renews at a time, and a failure makes the next attempt wait
   longer, from 5 minutes up to 1 hour (SV-3, SV-5).
+
+- **The service starts `agy acp` for an expired agy sign-in.** It does this
+  only if the user turned on the setting `antigravityRenewal` ("Renew Expired
+  Antigravity Sign-Ins" in Preferences). It is off by default. agy keeps its
+  Google token in the keyring without an OAuth client that Token Grill could
+  use, so only agy can renew it. The service sends the two Agent Client
+  Protocol requests `initialize` and `authenticate`, with no prompt and no
+  conversation (`providers/antigravity/renewal.py`). The argv is fixed, no
+  shell parses it, `DISPLAY` and `WAYLAND_DISPLAY` are removed and `BROWSER`
+  does nothing, so a sign-in that cannot be renewed opens no window. It stops
+  after 30 s or on cancellation, and a failure makes the next attempt wait
+  longer, from 5 minutes up to 1 hour. Only the agy sign-in kind `consumer`
+  is renewed, through the method `oauth-personal`; others stay expired.
 
 - **The Copy buttons write a fixed setup command to the clipboard.** The popup
   (`shell/serviceCard.ts`) calls `St.Clipboard.set_text()`. The preferences

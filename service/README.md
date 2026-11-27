@@ -74,6 +74,14 @@ discards the output, stops the command after 30 seconds, and reads the file
 again. After a failure, the next attempt for that file waits 5 minutes, and
 the wait doubles after each further failure, up to 1 hour.
 
+The setting `antigravityRenewal` is off by default. Turn it on in the
+extension Preferences: **Renew Expired Antigravity Sign-Ins** (General,
+Updates). Then, for an expired agy sign-in in the keyring, the service starts
+the installed `agy acp` without a display and sends the Agent Client Protocol
+requests `initialize` and `authenticate`. agy renews the sign-in and saves it
+in the keyring, and the service reads it again. It stops agy after 30 seconds,
+with the same waits after a failure.
+
 The service's HTTP client sends a credential only to its own service, over HTTPS,
 with no redirects, and only to the hosts in the table in the
 [main README](https://github.com/sh02sahil/token-grill/blob/main/README.md#privacy-and-network-access). It has no telemetry.

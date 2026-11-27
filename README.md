@@ -36,6 +36,11 @@ These are the functions of the top bar and the popup:
   off by default. When you turn it on, the service runs the installed
   `claude auth status` for an expired Claude Code sign-in. Claude Code renews
   the sign-in and saves it, and the service reads it again.
+- **Renew Expired Antigravity Sign-Ins** in Preferences (General, Updates) is
+  off by default. When you turn it on, the service starts the installed agy
+  for an expired agy sign-in. agy renews the sign-in and saves it, and the
+  service reads it again. agy opens no conversation and runs no prompt, but it
+  starts the MCP servers that you set up in agy.
 - **Usage Pace** in the account preferences shows whether a limit is used
   faster or slower than its period passes. The popup shows one line for each
   limit, and the top bar shows an icon: a flame for a fast pace, a check mark
@@ -195,7 +200,6 @@ connects only to these hosts. The extension itself makes no network request:
 | Kiro        | `codewhisperer.us-east-1.amazonaws.com` or `q.eu-central-1.amazonaws.com`                                                                          | Usage limits                            |
 | Kiro        | `q.us-gov-east-1.amazonaws.com` or `q.us-gov-west-1.amazonaws.com` (AWS GovCloud)                                                                  | Usage limits                            |
 | Kiro        | `q.us-iso-east-1.c2s.ic.gov`, `q.us-isob-east-1.sc2s.sgov.gov`, `q.us-isof-south-1.csp.hci.ic.gov`, or `q.us-isof-east-1.csp.hci.ic.gov` (AWS ISO) | Usage limits                            |
-| Kiro        | `oidc.<region>.amazonaws.com`                                                                                                                      | A new token when the sign-in is expired |
 | Antigravity | `cloudcode-pa.googleapis.com`                                                                                                                      | Plan and usage limits                   |
 | Antigravity | `oauth2.googleapis.com`                                                                                                                            | A new token when the sign-in is expired |
 | Copilot     | `api.github.com`                                                                                                                                   | Monthly allowances                      |
@@ -223,7 +227,7 @@ the word Antigravity. Thus, the User-Agent names all the services that Token Gri
 monitors.
 
 Token Grill starts no other program by itself, except when you turn on the
-Claude Code renewal. Only when you click **Sign In Again in a Terminal**, the
+Claude Code renewal or the Antigravity renewal. Only when you click **Sign In Again in a Terminal**, the
 extension opens your terminal with the login command of that account's CLI,
 from a fixed list in the extension. Only when you turn on **Renew Expired
 Claude Code Sign-Ins** in Preferences (it is off by default), the service runs
@@ -245,6 +249,23 @@ Claude Code Sign-Ins** in Preferences (it is off by default), the service runs
 - It applies only to Claude Code files named `.credentials.json`, not to
   OpenCode. The CLI must be on the `PATH` or in `~/.local/bin/claude`. A
   revoked sign-in still needs **Sign In Again in a Terminal**.
+
+Only when you turn on **Renew Expired Antigravity Sign-Ins** in Preferences (it
+is off by default), the service starts `agy acp` by itself for an expired agy
+sign-in:
+
+- The command has no shell and no terminal. `DISPLAY` and `WAYLAND_DISPLAY`
+  are removed and `BROWSER` does nothing, so a sign-in that cannot be renewed
+  opens no window.
+- The service sends two Agent Client Protocol requests, `initialize` and
+  `authenticate`. agy renews its Google sign-in and saves it in the keyring.
+  It sends no prompt and opens no conversation. agy does start the MCP
+  servers that you set up in it.
+- The command stops after 30 seconds, or when the refresh is cancelled. After a
+  failure, the next attempt waits 5 minutes, and the wait doubles after each
+  further failure, up to 1 hour. Then the service reads the keyring again.
+- It applies only to an agy sign-in with a personal Google account. A revoked
+  sign-in still needs agy in a terminal.
 
 Token Grill does not collect telemetry. It does not read or send prompts or
 responses.
@@ -308,9 +329,11 @@ For the new services, Token Grill reads these files and keyring items:
   Grill (`org.gnome.shell.extensions.tokengrill.ApiKey`). When you remove the
   account, Token Grill removes the item.
 
-If a Kiro or Antigravity access token is expired, Token Grill gets a new token.
-It keeps the new token only in memory. It does not write the token to the files
-or the keyring of the service.
+If an Antigravity access token is expired, Token Grill gets a new token. It
+keeps the new token only in memory. It does not write the token to the files or
+the keyring of the service. Token Grill does not renew a Kiro sign-in: AWS
+replaces the refresh token at each renewal, so a renewal by Token Grill would
+sign `kiro-cli` out. Only `kiro-cli` renews its sign-in.
 
 ### Files of Token Grill
 
