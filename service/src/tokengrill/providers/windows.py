@@ -4,6 +4,7 @@ import calendar
 from datetime import UTC, datetime, timedelta
 from typing import TypedDict
 
+from tokengrill.core.limits import MAX_WINDOW_SECONDS
 from tokengrill.core.types import CanonicalQuotaWindow
 
 # Labels are data, matched by the window preference and shown only for
@@ -19,6 +20,14 @@ def named_length(canonical_window: CanonicalQuotaWindow) -> int | None:
     if canonical_window == "five-hour":
         return FIVE_HOURS
     return WEEK if canonical_window == "weekly" else None
+
+
+def window_seconds(value: float | None) -> int | None:
+    """A window length the service reports. Below one second it would round to zero and divide by it in
+    the pace; beyond a year it is not a usage window."""
+    if value is None or not 1 <= value <= MAX_WINDOW_SECONDS:
+        return None
+    return int(value)
 
 
 def month_before(reset_at: float | None) -> float | None:

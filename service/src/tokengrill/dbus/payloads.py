@@ -6,6 +6,7 @@ from typing import Final
 from dbus_fast import DBusError
 
 from tokengrill.core.types import Alert, ProviderRuntimeState, ServiceState, SnapshotView
+from tokengrill.storage.atomic_json import dumps
 
 ERROR_PREFIX: Final = "io.github.sh02sahil.TokenGrill.Error"
 INVALID_ARGS: Final = f"{ERROR_PREFIX}.InvalidArgs"
@@ -14,21 +15,32 @@ KEYRING_UNAVAILABLE: Final = f"{ERROR_PREFIX}.KeyringUnavailable"
 INTERNAL: Final = f"{ERROR_PREFIX}.Internal"
 
 
+def wire_json(value: object) -> str:
+    """The text of every payload. JSON.parse in GJS rejects the whole text for one Infinity or NaN, so a
+    non-finite number goes out as null, as JSON.stringify would write it."""
+    return dumps(value)
+
+
 def state_json(state: ServiceState) -> str:
-    return json.dumps(state, separators=(",", ":"))
+    return wire_json(state)
 
 
 def alert_json(alert: Alert) -> str:
-    return json.dumps(alert, separators=(",", ":"))
+    return wire_json(alert)
 
 
 def account_json(snapshot: SnapshotView, runtime: ProviderRuntimeState) -> str:
-    return json.dumps({"schema": 1, "snapshot": snapshot, "runtime": runtime}, separators=(",", ":"))
+    return wire_json({"schema": 1, "snapshot": snapshot, "runtime": runtime})
+
+
+def _no_constant(name: str) -> object:
+    raise ValueError(f"{name} is not JSON")
 
 
 def parse_json_arg(text: str) -> object:
     try:
-        return json.loads(text)
+        # NaN and Infinity are not JSON, and a non-finite number stored in the config cannot be sent back.
+        return json.loads(text, parse_constant=_no_constant)
     # Python before 3.14 raises RecursionError, not a decode error, for deeply nested arrays.
     except (ValueError, RecursionError) as error:
         raise DBusError(INVALID_ARGS, "the argument is not valid JSON") from error

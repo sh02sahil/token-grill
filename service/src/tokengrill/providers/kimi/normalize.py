@@ -8,8 +8,9 @@ import re
 from typing import Any, Literal
 
 from tokengrill.core.json_util import clamp_fraction, is_record, record_at, string_at, to_epoch_ms, to_number
+from tokengrill.core.limits import MAX_LISTED
 from tokengrill.core.types import CanonicalQuotaWindow, UsageWindow
-from tokengrill.providers.windows import claim_type, month_before, named_length, window_label
+from tokengrill.providers.windows import claim_type, month_before, named_length, window_label, window_seconds
 
 # The key names give the length of each window.
 _RATIO_WINDOWS: list[tuple[str, CanonicalQuotaWindow, str, Literal["five-hour", "weekly", "month"]]] = [
@@ -64,7 +65,7 @@ def _ratio_windows(usages: dict[str, Any]) -> list[UsageWindow]:
 def _window_seconds(window: dict[str, Any] | None) -> int | None:
     duration = to_number(window.get("duration")) if window else None
     unit = _UNIT_SECONDS.get(string_at(window, "timeUnit") or "") if window else None
-    return int(duration * unit) if duration is not None and duration > 0 and unit is not None else None
+    return window_seconds(duration * unit) if duration is not None and unit is not None else None
 
 
 def _window_kind(seconds: int | None) -> CanonicalQuotaWindow:
@@ -108,7 +109,8 @@ def normalize_kimi_usage(payload: object) -> list[UsageWindow]:
         claimed.add("weekly")
         windows.append(weekly)
     limits = payload.get("limits")
-    for index, item in enumerate(limits if isinstance(limits, list) else []):
+    # A response may list any number of limits; the reading keeps as many as the popup can show.
+    for index, item in enumerate((limits if isinstance(limits, list) else [])[:MAX_LISTED]):
         if not is_record(item):
             continue
         seconds = _window_seconds(record_at(item, "window"))

@@ -1,6 +1,7 @@
 """The plain-text account overview printed by `tokengrill status`."""
 
 import re
+import unicodedata
 from typing import Final
 
 from tokengrill.core.messages import MESSAGES
@@ -19,6 +20,13 @@ _SERVICE_LABELS: Final[dict[ProviderKind, str]] = {
     "cursor": "Cursor",
 }
 _PLACEHOLDER: Final = re.compile(r"\{(\w+)\}")
+
+
+def _plain(text: str) -> str:
+    """Labels and names can come from a service response or another tool's files. Printed as they are, an
+    escape sequence would reach the terminal as a command: a new title, a cleared screen or a link. Every
+    control and format character, which includes the bidirectional overrides, is printed as '?'."""
+    return "".join("?" if unicodedata.category(char).startswith("C") else char for char in text)
 
 
 def error_text(error: ErrorInfo) -> str:
@@ -46,7 +54,8 @@ def render_status(state: ServiceState, now: int) -> str:
     for account in state["accounts"]:
         if lines:
             lines.append("")
-        lines.append(f"{_SERVICE_LABELS[account['kind']]} - {account['displayName']}")
+        service = _SERVICE_LABELS.get(account["kind"], account["kind"])
+        lines.append(f"{_plain(service)} - {_plain(account['displayName'])}")
         snapshot = state["snapshots"].get(account["id"])
         if not account["enabled"]:
             lines.append("  Disabled")
@@ -56,19 +65,19 @@ def render_status(state: ServiceState, now: int) -> str:
             continue
         for window in snapshot["windows"]:
             if window["percent"] is None:
-                lines.append(f"  {window['label']}: unknown")
+                lines.append(f"  {_plain(window['label'])}: unknown")
                 continue
             # percent is the used fraction (0 to 1), as in the snapshots of 0.4.1.
             left = round(100.0 * min(1.0, max(0.0, 1.0 - window["percent"])))
-            text = f"  {window['label']}: {left}% left"
+            text = f"  {_plain(window['label'])}: {left}% left"
             if window["resetAt"] is not None:
                 text += f", resets in {_duration(window['resetAt'], now)}"
             lines.append(text)
         balance = snapshot["balance"]
         if balance is not None:
-            lines.append(f"  Balance: {balance['amount']:.2f} {balance['currency']}")
+            lines.append(f"  Balance: {balance['amount']:.2f} {_plain(balance['currency'])}")
         if snapshot["errorInfo"] is not None:
-            lines.append(f"  Error: {error_text(snapshot['errorInfo'])}")
+            lines.append(f"  Error: {_plain(error_text(snapshot['errorInfo']))}")
         updated = snapshot["lastUpdated"]
         if updated is None:
             lines.append("  not updated yet")

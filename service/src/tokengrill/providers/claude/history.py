@@ -1,7 +1,9 @@
 """The Claude Code session log line that carries the usage of one assistant message."""
 
-from tokengrill.core.json_util import number_at, parse_record, record_at, string_at, to_epoch_ms
+from tokengrill.core.json_util import count_at, parse_record, record_at, string_at, to_epoch_ms
 from tokengrill.core.types import UsageEvent
+
+_COUNTS = ("input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")
 
 
 def claude_usage_event(line: str) -> UsageEvent | None:
@@ -17,8 +19,10 @@ def claude_usage_event(line: str) -> UsageEvent | None:
     captured_at = to_epoch_ms(string_at(record, "timestamp"))
     if not message or not usage or captured_at is None:
         return None
-    input_tokens = number_at(usage, "input_tokens") or 0
-    output_tokens = number_at(usage, "output_tokens") or 0
+    counts = [count_at(usage, key) for key in _COUNTS]
+    if None in counts:
+        return None
+    input_tokens, output_tokens, cached, written = (count or 0 for count in counts)
     total = input_tokens + output_tokens
     if not total:
         return None
@@ -26,11 +30,11 @@ def claude_usage_event(line: str) -> UsageEvent | None:
         "capturedAt": int(captured_at),
         "model": string_at(message, "model"),
         "totals": {
-            "input": int(input_tokens),
-            "output": int(output_tokens),
-            "cachedInput": int(number_at(usage, "cache_read_input_tokens") or 0),
-            "cacheWrite": int(number_at(usage, "cache_creation_input_tokens") or 0),
+            "input": input_tokens,
+            "output": output_tokens,
+            "cachedInput": cached,
+            "cacheWrite": written,
             "reasoning": 0,
-            "total": int(total),
+            "total": total,
         },
     }

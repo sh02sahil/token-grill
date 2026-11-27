@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {UNTRANSLATED} from './untranslated.mjs';
 import {errorText} from '../../build/tests/popup-model.mjs';
-import {signInCommand} from '../../build/tests/sign-in.mjs';
+import {execLine, signInCommand} from '../../build/tests/sign-in.mjs';
 
 // The service says whether the account lives in the default home of its CLI.
 test('the default home signs in with the plain command', () => {
@@ -56,4 +56,18 @@ test('the hints take each login command from the sign-in table', async () => {
     const [model, dialog] = await Promise.all([read('src/core/popupModel.ts'), read('src/prefs/addAccountDialog.ts')]);
     for (const command of ['codex login', 'claude auth login', 'kiro-cli login', 'gh auth login', 'opencode auth login', 'agent login', 'Run copilot', '\'copilot\', \'/login\''])
         assert.ok(!model.includes(command) && !dialog.includes(command), command);
+});
+
+// What GLib does to an Exec line before it splits it: each %% becomes %, and
+// every other field code is replaced or dropped.
+function expandFieldCodes(line) {
+    return line.replace(/%(.)/g, (_match, code) => code === '%' ? '%' : '');
+}
+
+test('a percent sign in an account home cannot reach the field-code expansion', () => {
+    for (const home of ['/home/test/.claude%c sh -c "touch x" x\'', '/home/test/a%fb', '/home/test/a%%b', '/home/test/a%', '/home/test/50%u'])  {
+        const argv = ['env', `CLAUDE_CONFIG_DIR=${home}`, 'claude', 'auth', 'login'];
+        const quoted = argv.map(arg => `'${arg.replaceAll("'", "'\\''")}'`).join(' ');
+        assert.equal(expandFieldCodes(execLine(argv)), quoted, home);
+    }
 });

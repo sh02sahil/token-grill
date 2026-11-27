@@ -69,7 +69,8 @@ export class AddAccountDialog extends Adw.Dialog {
     }
 
     private _linkRow(title: string, subtitle: string, kind: ProviderKind, open: () => void): Adw.ActionRow {
-        const row = new Adw.ActionRow({title, subtitle, activatable: true});
+        // Callers pass fixed names; markup stays off as for every row whose text is not a literal here.
+        const row = new Adw.ActionRow({title, subtitle, activatable: true, use_markup: false});
         row.add_prefix(providerIcon(this._context.extensionPath, kind));
         row.add_suffix(new Gtk.Image({icon_name: 'go-next-symbolic'}));
         row.connect('activated', open);

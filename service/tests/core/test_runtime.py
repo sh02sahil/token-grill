@@ -92,6 +92,7 @@ class FakeCollector:
         self.manual: list[bool] = []
         self.history: list[bool] = []
         self.claude_renewal: list[bool] = []
+        self.instances: list[ProviderInstance] = []
         self.percent = 0.8
         self.fail_with: ServiceError | None = None
         self.crash = False
@@ -105,6 +106,7 @@ class FakeCollector:
         self, instance: ProviderInstance, snapshot: ProviderSnapshot, ctx: CollectorContext
     ) -> ProviderSnapshot:
         self.calls += 1
+        self.instances.append(instance)
         self.manual.append(ctx.manual)
         self.history.append(ctx.history_enabled)
         self.claude_renewal.append(ctx.claude_renewal)
@@ -564,7 +566,7 @@ async def test_the_report_has_the_service_version_and_the_redacted_steps(rig: Ri
     report = rig.runtime.diagnostics_report()
     lines = report.splitlines()
     assert lines[0].startswith(f"Token Grill service {tokengrill.__version__} - ")
-    assert any(" codex-1 (codex, codex-cli) sign-in: codex-cli ~/.codex/auth.json" in line for line in lines[1:])
+    assert any(" codex-1 (codex, codex-cli) sign-in: codex-cli default folder auth.json" in line for line in lines[1:])
     assert str(Path.home()) not in report
 
 
@@ -601,3 +603,63 @@ async def test_a_refused_private_folder_is_one_warning_that_names_the_folder(
     assert len(warnings) == 1
     assert str(folder) in warnings[0].getMessage()
     await made.runtime.stop()
+
+
+async def _batch_with_edit(xdg: Path, edit: Callable[[Runtime], Awaitable[object]]) -> Rig:
+    """Account a blocks the batch [a, b]; the edit of b returns while b's job still waits behind it."""
+    made = await build(xdg, [codex_account(), codex_account(id="b", accountHome="~/.codex-b")])
+    await made.runtime.start()
+    made.fake.block = asyncio.Event()
+    accounts = {account["id"]: account for account in made.runtime._accounts()}
+    task = asyncio.create_task(
+        made.runtime._collect(
+            [{"provider": accounts["a"], "manual": True}, {"provider": accounts["b"], "manual": True}]
+        )
+    )
+    await made.fake.wait_calls(1)
+    await edit(made.runtime)
+    made.fake.block.set()
+    await asyncio.wait_for(task, WAIT)
+    return made
+
+
+async def test_a_queued_job_of_a_removed_account_is_skipped(xdg: Path) -> None:
+    made = await _batch_with_edit(xdg, lambda runtime: runtime.remove_account("b", False))
+    try:
+        assert [instance["id"] for instance in made.fake.instances] == ["a"]
+    finally:
+        await made.runtime.stop()
+
+
+async def test_a_queued_job_of_a_disabled_account_is_skipped(xdg: Path) -> None:
+    made = await _batch_with_edit(xdg, lambda runtime: runtime.update_account({"id": "b", "enabled": False}))
+    try:
+        assert [instance["id"] for instance in made.fake.instances] == ["a"]
+    finally:
+        await made.runtime.stop()
+
+
+async def test_a_queued_job_uses_the_settings_of_the_last_edit(xdg: Path) -> None:
+    made = await _batch_with_edit(xdg, lambda runtime: runtime.update_account({"id": "b", "liveUsageEnabled": False}))
+    try:
+        later = [instance for instance in made.fake.instances if instance["id"] == "b"]
+        assert later
+        assert all(not instance["liveUsageEnabled"] for instance in later)
+    finally:
+        await made.runtime.stop()
+
+
+async def test_the_report_names_no_folder_or_file_the_user_chose(xdg: Path) -> None:
+    named = codex_account(id="b", accountHome="~/.codex-acmecorp", authFileOverride="/media/jdoe/codex.json")
+    made = await build(xdg, [codex_account(accountHome="~/.codex-clientname"), named])
+    try:
+        await made.runtime.start()
+        await made.runtime.refresh(ACCOUNT_ID)
+        await made.runtime.refresh("b")
+        report = made.runtime.diagnostics_report()
+        assert "codex-cli other folder auth.json" in report
+        assert "codex-cli chosen file" in report
+        for name in ("clientname", "acmecorp", "jdoe", "media"):
+            assert name not in report
+    finally:
+        await made.runtime.stop()

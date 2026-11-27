@@ -319,11 +319,12 @@ test('the popup shows the service card while the service is not connected', asyn
 
 // The Shell launches only a command from its own fixed table, never one that came over the bus.
 test('sign-in builds its command in the extension and opens it without a shell', async () => {
-    const [signIn, runtime, client, iface] = await Promise.all([
-        read('src/shell/signIn.ts'), read('src/runtime.ts'), read('src/client.ts'), read('src/dbus/interface.ts'),
+    const [signIn, core, runtime, client, iface] = await Promise.all([
+        read('src/shell/signIn.ts'), read('src/core/signIn.ts'), read('src/runtime.ts'), read('src/client.ts'), read('src/dbus/interface.ts'),
     ]);
     assert.match(signIn, /export function openSignIn\(argv: string\[\]\): void/);
-    assert.match(signIn, /GLib\.shell_quote\(arg\)/);
+    assert.match(signIn, /create_from_commandline\(execLine\(argv\),/);
+    assert.match(core, /GLib\.shell_quote\(arg\)\.replaceAll\('%', '%%'\)/);
     assert.match(signIn, /Gio\.AppInfoCreateFlags\.NEEDS_TERMINAL/);
     assert.match(runtime, /import \{signInCommand\} from '\.\/core\/signIn\.js';/);
     assert.match(runtime, /const command = provider && snapshot \? signInCommand\(provider, snapshot\.homeIsDefault\) : null;\s*if \(command\)\s*openSignIn\(command\.argv\);/);
@@ -465,4 +466,25 @@ test('the DeepSeek page offers the paste group whether or not the key search wor
     const page = source.slice(source.indexOf('private _deepSeekPage('), source.indexOf('private _pasteGroup('));
     assert.match(page, /page\.add\(this\._pasteGroup\(\)\);\s*\}, \(\) => page\.add\(this\._pasteGroup\(\)\)\);/);
     assert.match(source, /this\._context\.request\(work, \{done, failed, cancellable: this\._cancellable\}\)/);
+});
+
+test('preferences rows that show service or user text do not read it as Pango markup', async () => {
+    const dir = new URL('../../src/prefs/', import.meta.url);
+    for (const name of await readdir(dir)) {
+        const source = await readFile(new URL(name, dir), 'utf8');
+        for (const match of source.matchAll(/new Adw\.ActionRow\(\{([\s\S]*?)\}\)/g)) {
+            const body = match[1];
+            const values = [...body.matchAll(/\b(?:title|subtitle)(?:: ([^,\n]+))?/g)].map(found => (found[1] ?? found[0]).trim());
+            const literal = values.every(value => value.startsWith('_('));
+            if (!literal)
+                assert.match(body, /use_markup: false/, `${name}: ${body.trim().slice(0, 80)}`);
+        }
+    }
+});
+
+test('the popup bounds the rows and the credit count that the service sends', async () => {
+    const card = await readFile(new URL('../../src/shell/providerCard.ts', import.meta.url), 'utf8');
+    assert.match(card, /Number\.isSafeInteger\(reported\)/);
+    assert.match(card, /\.slice\(0, MAX_LIMIT_ROWS\)/);
+    assert.match(card, /summary\.credits\.slice\(0, MAX_CREDIT_ROWS\)/);
 });

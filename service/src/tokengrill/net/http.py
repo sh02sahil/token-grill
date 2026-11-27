@@ -172,6 +172,7 @@ class HttpClient:
         parsed: Any
         try:
             parsed = json.loads(text)
-        except ValueError:
+        except (ValueError, RecursionError):
+            # A body nested deeper than the parser's stack is as unreadable as malformed JSON.
             raise ServiceError("response-shape", "net.invalid-json") from None
         return parsed

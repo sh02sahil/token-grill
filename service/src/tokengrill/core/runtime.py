@@ -29,7 +29,7 @@ from tokengrill.core.config import (
 from tokengrill.core.diagnostics import DiagnosticEntry, DiagnosticStep, format_report, redact
 from tokengrill.core.errors import InvalidRequest, ServiceError
 from tokengrill.core.order import reorder_providers
-from tokengrill.core.paths import provider_paths, runtime_dir
+from tokengrill.core.paths import home_is_default, provider_paths, runtime_dir
 from tokengrill.core.readings import restored_snapshot, snapshot_fingerprint
 from tokengrill.core.scheduler import Scheduler, SchedulerJob
 from tokengrill.core.snapshot_view import snapshot_view
@@ -517,7 +517,12 @@ class Runtime:
         try:
             async with self._collecting:
                 for job in jobs:
-                    await self._refresh_account(job["provider"], job["manual"])
+                    # A job waits behind the accounts before it; an edit made meanwhile applies to it.
+                    account = next((a for a in self._accounts() if a["id"] == job["provider"]["id"]), None)
+                    if account is None or not account["enabled"]:
+                        self._finish(job["provider"]["id"], "unchanged")
+                        continue
+                    await self._refresh_account(account, job["manual"])
                 await self._flush_quietly()
         except asyncio.CancelledError:
             # Losing the shell client or stopping must not leave an account mid-refresh.
@@ -694,9 +699,15 @@ class Runtime:
         self._emitter.account_changed(account_id, snapshot, _copy_state(state))
 
     def _sign_in_source(self, instance: ProviderInstance) -> str:
-        """Testers' reports show which file or keyring item an app's sign-in came from."""
-        path = "" if instance["app"] in ("keyring", "copilot-cli") else provider_paths(instance)["authFile"]
-        return f"{instance['app']} {path}" if path else f"{instance['app']} keyring"
+        """Reports show the kind of place a sign-in came from. A folder or file the user chose is never
+        named: its name is often the account's own name, and a report is meant to be shared."""
+        if instance["app"] in ("keyring", "copilot-cli"):
+            return f"{instance['app']} keyring"
+        if instance["authFileOverride"]:
+            return f"{instance['app']} chosen file"
+        where = "default folder" if home_is_default(instance) else "other folder"
+        # Inside a home the file names are fixed by the app, such as auth.json.
+        return f"{instance['app']} {where} {Path(provider_paths(instance)['authFile']).name}"
 
     def _record(self, instance: ProviderInstance, step: DiagnosticStep, detail: str) -> None:
         same_kind = [account["id"] for account in self._accounts() if account["kind"] == instance["kind"]]

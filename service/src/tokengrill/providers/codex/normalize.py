@@ -3,8 +3,9 @@
 from typing import Any, TypedDict
 
 from tokengrill.core.json_util import clamp_fraction, is_record, number_at, record_at, string_at, to_epoch_ms
+from tokengrill.core.limits import MAX_LISTED
 from tokengrill.core.types import CanonicalQuotaWindow, UsageWindow
-from tokengrill.providers.windows import claim_type
+from tokengrill.providers.windows import claim_type, window_seconds
 
 HOUR_SECONDS = 60 * 60
 DAY_SECONDS = 24 * HOUR_SECONDS
@@ -45,7 +46,7 @@ def _normalize_window(window: dict[str, Any], name: str | None, index: int, clai
         "limit": None,
         "percent": clamp_fraction(percentage_points / 100),
         "resetAt": None if reset_at is None else int(reset_at),
-        "durationSeconds": int(seconds) if seconds is not None and seconds > 0 else None,
+        "durationSeconds": window_seconds(seconds),
         "unit": None,
         "pace": None,
     }
@@ -66,7 +67,8 @@ def normalize_codex_usage(payload: object) -> CodexUsage:
     ]
     # Plans with model-specific limits list them separately, each with its own windows.
     extra = payload.get("additional_rate_limits")
-    for limit in [item for item in extra if is_record(item)] if isinstance(extra, list) else []:
+    # A response may list any number of them; the reading keeps as many as the popup can show.
+    for limit in ([item for item in extra if is_record(item)] if isinstance(extra, list) else [])[:MAX_LISTED]:
         model = string_at(limit, "limit_name") or "Usage limit"
         sources.extend((window, model) for window in _rate_limit_windows(record_at(limit, "rate_limit")))
     windows: list[UsageWindow] = []

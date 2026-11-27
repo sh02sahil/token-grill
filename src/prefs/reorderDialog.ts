@@ -65,7 +65,9 @@ export class ReorderDialog extends Adw.Dialog {
         const last = this._providers.length - 1;
         this._providers.forEach((provider, index) => {
             const {label} = providerMetadata(provider.kind);
+            // A name from the user is text, not Pango markup.
             const row = new Adw.ActionRow({
+                use_markup: false,
                 title: provider.displayName,
                 subtitle: provider.enabled ? label : formatText(_('%s - Disabled'), label),
             });

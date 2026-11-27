@@ -90,7 +90,8 @@ export class AccountPage extends Adw.NavigationPage {
         setAccessibleLabel(this._custom, _('Custom Color'));
 
         main.add(this._signedInRow());
-        this._topBar = new Adw.ActionRow({title: _('Top Bar'), subtitle: this._topBarText()});
+        // Limit labels from the service and paths are text, not Pango markup.
+        this._topBar = new Adw.ActionRow({title: _('Top Bar'), subtitle: this._topBarText(), use_markup: false});
         main.add(this._topBar);
 
         // Kept near the top so that the switch is visible without scrolling.
@@ -217,7 +218,7 @@ export class AccountPage extends Adw.NavigationPage {
         const app = APP_NAMES[provider.app];
         // Translators: an app name, then where its sign-in is read.
         const source = where ? formatText(_('%s - %s'), app, where) : app;
-        const row = new Adw.ActionRow({title: _('Signed In With'), subtitle: source});
+        const row = new Adw.ActionRow({title: _('Signed In With'), subtitle: source, use_markup: false});
         this._context.request(client => client.credentialState(provider.id), {
             done: state => {
                 const label = credentialLabel(TRANSLATOR, state);

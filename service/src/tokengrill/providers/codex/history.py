@@ -1,7 +1,9 @@
 """The Codex session log line that carries the usage of one model turn."""
 
-from tokengrill.core.json_util import number_at, parse_record, record_at, string_at, to_epoch_ms
+from tokengrill.core.json_util import count_at, parse_record, record_at, string_at, to_epoch_ms
 from tokengrill.core.types import UsageEvent
+
+_COUNTS = ("input_tokens", "output_tokens", "cached_input_tokens", "reasoning_output_tokens")
 
 
 def codex_usage_event(line: str) -> UsageEvent | None:
@@ -18,22 +20,25 @@ def codex_usage_event(line: str) -> UsageEvent | None:
     captured_at = to_epoch_ms(string_at(record, "timestamp"))
     if not usage or captured_at is None:
         return None
-    input_tokens = number_at(usage, "input_tokens") or 0
-    output_tokens = number_at(usage, "output_tokens") or 0
-    total = number_at(usage, "total_tokens")
+    counts = [count_at(usage, key) for key in _COUNTS]
+    if None in counts:
+        return None
+    input_tokens, output_tokens, cached, reasoning = (count or 0 for count in counts)
+    reported = usage.get("total_tokens")
+    total = count_at(usage, "total_tokens") if isinstance(reported, int | float) else input_tokens + output_tokens
     if total is None:
-        total = input_tokens + output_tokens
+        return None
     if not total:
         return None
     return {
         "capturedAt": int(captured_at),
         "model": None,
         "totals": {
-            "input": int(input_tokens),
-            "output": int(output_tokens),
-            "cachedInput": int(number_at(usage, "cached_input_tokens") or 0),
+            "input": input_tokens,
+            "output": output_tokens,
+            "cachedInput": cached,
             "cacheWrite": 0,
-            "reasoning": int(number_at(usage, "reasoning_output_tokens") or 0),
-            "total": int(total),
+            "reasoning": reasoning,
+            "total": total,
         },
     }

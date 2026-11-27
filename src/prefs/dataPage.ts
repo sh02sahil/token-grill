@@ -30,12 +30,15 @@ export class DataPage extends Adw.PreferencesPage {
             title: _('Local Data'),
             description: _('Only compact aggregates and checkpoints are stored; logs of the services are never modified'),
         });
+        // A folder name is text, not Pango markup.
         group.add(new Adw.ActionRow({
+            use_markup: false,
             title: _('Usage History'),
             subtitle: displayPath(GLib.build_filenamev([GLib.get_user_data_dir(), APP_DIRECTORY, 'history-v1.json'])),
             subtitle_selectable: true,
         }));
         group.add(new Adw.ActionRow({
+            use_markup: false,
             title: _('Parser Checkpoints'),
             subtitle: displayPath(GLib.build_filenamev([GLib.get_user_state_dir(), APP_DIRECTORY, 'checkpoints-v1.json'])),
             subtitle_selectable: true,

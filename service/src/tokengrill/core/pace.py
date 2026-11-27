@@ -1,5 +1,6 @@
 """How fast a limit is used compared with an even pace through its window."""
 
+import math
 from typing import TypedDict
 
 from tokengrill.core.topbar import shown_limits
@@ -25,10 +26,15 @@ def pace_lead(window: UsageWindow | _Paced, now: int) -> float | None:
     percent = window["percent"]
     reset_at = window["resetAt"]
     duration = window["durationSeconds"]
-    if percent is None or reset_at is None or duration is None:
+    if percent is None or reset_at is None or duration is None or duration <= 0:
         return None
-    elapsed = 1 - (reset_at - now) / (duration * 1000)
-    if elapsed < MIN_ELAPSED or elapsed >= 1:
+    # The numbers come from a service response or a stored reading, so they are computed as floats and
+    # checked: a pace that cannot be computed is no pace, never an error for the whole state.
+    try:
+        elapsed = 1 - (float(reset_at) - now) / (float(duration) * 1000)
+    except OverflowError:
+        return None
+    if not math.isfinite(elapsed) or elapsed < MIN_ELAPSED or elapsed >= 1:
         return None
     return percent - elapsed
 
@@ -44,11 +50,14 @@ def runs_out_at(window: UsageWindow | _Paced, now: int) -> int | None:
     percent = window["percent"]
     reset_at = window["resetAt"]
     duration = window["durationSeconds"]
-    if percent is None or reset_at is None or duration is None or percent <= 0:
+    if percent is None or reset_at is None or duration is None or duration <= 0 or percent <= 0:
         return None
-    start = reset_at - duration * 1000
-    at = start + (now - start) / percent
-    return round(at) if at < reset_at else None
+    try:
+        start = float(reset_at) - float(duration) * 1000
+        at = start + (now - start) / percent
+    except OverflowError:
+        return None
+    return round(at) if math.isfinite(at) and at < reset_at else None
 
 
 def account_pace(windows: list[UsageWindow], now: int) -> PaceLevel | None:

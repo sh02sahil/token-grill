@@ -17,6 +17,7 @@ const GI_STUBS = {
             get_home_dir: () => '/home/test',
             get_user_config_dir: () => '/home/test/.config',
             get_user_data_dir: () => '/home/test/.local/share',
+            shell_quote: text => \`'\${text.replaceAll("'", "'\\\\''")}'\`,
             uuid_string_random: () => randomUUID(),
         };`,
     'gi://Gio': `

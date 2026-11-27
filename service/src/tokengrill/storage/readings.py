@@ -5,8 +5,9 @@ from pathlib import Path
 from typing import Any, TypedDict
 
 from tokengrill.core.json_util import is_record
+from tokengrill.core.limits import MAX_LISTED, MAX_READING_BYTES, MAX_RESET_CREDITS, MAX_WINDOWS
 from tokengrill.core.types import Balance, ProviderSnapshot, UsageWindow
-from tokengrill.storage.atomic_json import Persisted, dumps, state_path
+from tokengrill.storage.atomic_json import MAX_STATE_BYTES, Persisted, dumps, state_path
 
 
 class StoredReading(TypedDict):
@@ -22,7 +23,13 @@ _CANONICAL_WINDOWS = ("five-hour", "weekly", "monthly", "other")
 
 
 def _is_number(value: object) -> bool:
-    return isinstance(value, int | float) and not isinstance(value, bool) and math.isfinite(value)
+    if not isinstance(value, int | float) or isinstance(value, bool):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        # An integer too large for a float is damage, and a damaged entry is dropped, never raised.
+        return False
 
 
 def _nullable_number(record: dict[str, Any], key: str) -> bool:
@@ -57,8 +64,8 @@ def _is_credit(value: object) -> bool:
 def _is_reset_credits(value: object) -> bool:
     return (
         is_record(value)
-        and isinstance(value.get("availableCount"), int | float)
-        and not isinstance(value.get("availableCount"), bool)
+        and _is_number(value.get("availableCount"))
+        and 0 <= value["availableCount"] <= MAX_RESET_CREDITS
         and isinstance(value.get("fetchedAt"), int | float)
         and not isinstance(value.get("fetchedAt"), bool)
         and isinstance(value.get("stale"), bool)
@@ -90,9 +97,9 @@ def stored_reading(snapshot: ProviderSnapshot) -> StoredReading | None:
     credits = snapshot["resetCredits"]
     return {
         "plan": snapshot["plan"],
-        "windows": [_without_pace(window) for window in snapshot["windows"]],
+        "windows": [_without_pace(window) for window in snapshot["windows"][:MAX_WINDOWS]],
         "balance": snapshot["balance"],
-        "resetCredits": {**credits, "error": None} if credits else None,
+        "resetCredits": {**credits, "credits": credits["credits"][:MAX_LISTED], "error": None} if credits else None,
         "fetchedAt": fetched_at,
     }
 
@@ -141,6 +148,9 @@ class ReadingStore(Persisted):
         """A snapshot without a reading, such as one cleared for a new sign-in, removes the old one."""
         provider_id = snapshot["providerId"]
         reading = stored_reading(snapshot)
+        if reading is not None and not self._fits(provider_id, reading):
+            # The file holds every account; one reading too large to load again would lose them all.
+            reading = None
         previous = self._readings.get(provider_id)
         if dumps(reading) == dumps(previous):
             return
@@ -149,6 +159,12 @@ class ReadingStore(Persisted):
         else:
             self._readings.pop(provider_id, None)
         self._mark_dirty()
+
+    def _fits(self, provider_id: str, reading: StoredReading) -> bool:
+        if len(dumps(reading).encode("utf-8")) > MAX_READING_BYTES:
+            return False
+        others = sum(len(dumps(kept).encode("utf-8")) for key, kept in self._readings.items() if key != provider_id)
+        return others + MAX_READING_BYTES < MAX_STATE_BYTES
 
     async def remove_provider(self, provider_id: str) -> None:
         self._readings.pop(provider_id, None)

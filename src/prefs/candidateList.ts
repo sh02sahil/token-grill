@@ -65,7 +65,8 @@ export class CandidateList {
     private _checkRow(candidate: Addable): Adw.ActionRow {
         const duplicate = candidate.duplicateOf ? this._configured.find(item => item.id === candidate.duplicateOf) ?? null : null;
         const check = new Gtk.CheckButton({active: !duplicate, valign: Gtk.Align.CENTER});
-        const row = new Adw.ActionRow({title: candidate.label, subtitle: where(candidate), activatable_widget: check});
+        // A label made from a folder name, and a path, are text, not Pango markup.
+        const row = new Adw.ActionRow({title: candidate.label, subtitle: where(candidate), activatable_widget: check, use_markup: false});
         // add_prefix() places each widget first, so the check box ends up before the icon.
         row.add_prefix(providerIcon(this._extensionPath, candidate.kind));
         row.add_prefix(check);
@@ -93,7 +94,7 @@ export class CandidateList {
         else if (candidate.status === 'uses-other-app')
             // Translators: %s is a service name, such as Kiro.
             subtitle = formatText(_("Uses the %s app's own sign-in; add it from there"), candidate.label);
-        const row = new Adw.ActionRow({title: candidate.label, subtitle, sensitive: false});
+        const row = new Adw.ActionRow({title: candidate.label, subtitle, sensitive: false, use_markup: false});
         if (candidate.kind)
             row.add_prefix(providerIcon(this._extensionPath, candidate.kind));
         return row;

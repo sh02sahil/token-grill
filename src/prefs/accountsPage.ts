@@ -122,6 +122,8 @@ export class AccountsPage extends Adw.PreferencesPage {
 
     private _buildRow(provider: ProviderInstance): Adw.ActionRow {
         const row = new Adw.ActionRow({
+            // A name or a limit label from the service is text, not Pango markup.
+            use_markup: false,
             title: provider.displayName,
             subtitle: accountSubtitle(provider, this._context.windows(provider.id), _('Checking credentials...')),
             activatable: true,

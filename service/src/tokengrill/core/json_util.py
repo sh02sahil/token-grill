@@ -6,6 +6,8 @@ import re
 from datetime import UTC, datetime, timedelta
 from typing import Any, TypeGuard
 
+from tokengrill.core.limits import MAX_EPOCH_MS, MAX_TOKENS
+
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 _MS = timedelta(milliseconds=1)
 _DECIMAL = re.compile(r"[+-]?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][+-]?[0-9]+)?")
@@ -30,7 +32,8 @@ def parse_record(text: str) -> dict[str, Any] | None:
     """Text from another program may be truncated or rewritten while it is read."""
     try:
         value = json.loads(text)
-    except ValueError:
+    except (ValueError, RecursionError):
+        # A record nested deeper than the parser's stack is skipped like a damaged one.
         return None
     return value if is_record(value) else None
 
@@ -43,6 +46,17 @@ def record_at(record: dict[str, Any], key: str) -> dict[str, Any] | None:
 def number_at(record: dict[str, Any], key: str) -> int | float | None:
     value = record.get(key)
     return value if _is_finite_number(value) else None
+
+
+def count_at(record: dict[str, Any], key: str) -> int | None:
+    """A token count. A missing or non-numeric one is 0, as before; a negative or impossibly large one
+    marks a damaged record, which is skipped."""
+    value = record.get(key)
+    if not isinstance(value, int | float) or isinstance(value, bool):
+        return 0
+    if not _is_finite_number(value) or not 0 <= value <= MAX_TOKENS:
+        return None
+    return int(value)
 
 
 def string_at(record: dict[str, Any], key: str) -> str | None:
@@ -67,9 +81,11 @@ def to_epoch_ms(value: object) -> int | float | None:
     Epoch values below 1e10 are seconds: as milliseconds they would predate 1970-04.
     """
     if _is_finite_number(value):
-        return value * 1000 if value < 1e10 else value
+        scaled = value * 1000 if value < 1e10 else value
+        return scaled if 0 <= scaled <= MAX_EPOCH_MS else None
     if isinstance(value, str) and value != "":
-        return _parse_date(value)
+        parsed = _parse_date(value)
+        return parsed if parsed is not None and 0 <= parsed <= MAX_EPOCH_MS else None
     return None
 
 

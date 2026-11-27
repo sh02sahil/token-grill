@@ -1,7 +1,6 @@
 """The exported D-Bus object; interface.xml next to it is the source of truth for its shape."""
 
 import asyncio
-import json
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
@@ -24,6 +23,7 @@ from tokengrill.dbus.payloads import (
     alert_json,
     parse_json_arg,
     state_json,
+    wire_json,
 )
 
 INTERFACE_NAME: Final = "io.github.sh02sahil.TokenGrill1"
@@ -32,7 +32,7 @@ _T = TypeVar("_T")
 
 
 def _result(value: dict[str, object]) -> str:
-    return json.dumps({"schema": 1, **value}, separators=(",", ":"))
+    return wire_json({"schema": 1, **value})
 
 
 async def _checked(work: Awaitable[_T]) -> _T:
@@ -119,12 +119,12 @@ class TokenGrillInterface(ServiceInterface):
     def accounts_changed(self, accounts: list[ProviderInstance]) -> None:
         if self._muted:
             return
-        self.AccountsChanged(json.dumps({"schema": 1, "accounts": accounts}, separators=(",", ":")))
+        self.AccountsChanged(wire_json({"schema": 1, "accounts": accounts}))
 
     def settings_changed(self, settings: Settings) -> None:
         if self._muted:
             return
-        self.SettingsChanged(json.dumps({"schema": 1, "settings": settings}, separators=(",", ":")))
+        self.SettingsChanged(wire_json({"schema": 1, "settings": settings}))
 
     def alert(self, alert: Alert) -> None:
         if self._muted:

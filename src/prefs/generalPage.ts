@@ -19,7 +19,8 @@ interface ToggleRowOptions {
 }
 
 function toggleRow(settings: Gio.Settings, {key, title, subtitle, choices}: ToggleRowOptions): Adw.ActionRow {
-    const row = new Adw.ActionRow({title, subtitle});
+    // Callers pass fixed text; markup stays off as for every row whose text is not a literal here.
+    const row = new Adw.ActionRow({title, subtitle, use_markup: false});
     const group = new Adw.ToggleGroup({valign: Gtk.Align.CENTER});
     for (const [name, label] of choices)
         group.add(new Adw.Toggle({name, label}));
@@ -104,7 +105,9 @@ export class GeneralPage extends Adw.PreferencesPage {
         for (const row of this._rows)
             this._shown.remove(row);
         const shown = this._context.accounts.filter(provider => provider.enabled && isShown(provider));
+        // A name or a limit label from the service is text, not Pango markup.
         this._rows = shown.map(provider => new Adw.ActionRow({
+            use_markup: false,
             // Translators: a service name, then the account name.
             title: formatText(_('%s - %s'), providerMetadata(provider.kind).label, provider.displayName),
             subtitle: topBarSummary(TRANSLATOR, provider.topBar, this._context.windows(provider.id)),

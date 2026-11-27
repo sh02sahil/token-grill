@@ -1,3 +1,5 @@
+import GLib from 'gi://GLib';
+
 import {expandPath} from './paths.js';
 import type {AccountApp, ProviderInstance} from './types.js';
 
@@ -42,6 +44,14 @@ interface SignInCommand {
     login: string;
     // The variable and home a non-default account needs, for the hint text.
     home: {variable: string; path: string} | null;
+}
+
+// The command line for Gio.AppInfo.create_from_commandline(). That function
+// reads a desktop-entry Exec value: GLib expands its % field codes on the raw
+// line before it splits the line into words, and quotes do not stop it. A %
+// in an account home, such as %c, could otherwise pick the program that runs.
+export function execLine(argv: string[]): string {
+    return argv.map(arg => GLib.shell_quote(arg).replaceAll('%', '%%')).join(' ');
 }
 
 // The command that signs this account in again in a terminal, or null when

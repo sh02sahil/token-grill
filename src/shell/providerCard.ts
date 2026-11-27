@@ -280,6 +280,12 @@ export class InfoItem extends StaticMenuItem {
     }
 }
 
+// A service response decides how many limits and credits an account has. The
+// service already cuts both lists; this bound keeps the shell's own work
+// bounded whatever a service of another version sends.
+const MAX_LIMIT_ROWS = 40;
+const MAX_CREDIT_ROWS = 20;
+
 function creditsMenuText(summary: LimitResetCreditSummary, count: number): string {
     if (summary.stale)
         return ngettext('Reset Credits - %d Available (Cached)', 'Reset Credits - %d Available (Cached)', count).format(count);
@@ -353,7 +359,7 @@ export class ProviderDetail extends PopupMenu.PopupMenuSection {
 
     // Rows are rebuilt only when the set of limits changes, so keyboard focus survives refreshes.
     private _updateLimits(instance: ProviderInstance, snapshot: ProviderSnapshot | null, mode: PanelPercentageMode): void {
-        const rows = this._rows(instance, snapshot);
+        const rows = this._rows(instance, snapshot).slice(0, MAX_LIMIT_ROWS);
         const keys = JSON.stringify(rows.map(row => [row.key, row.title]));
         if (keys !== this._limitKeys) {
             this._limitKeys = keys;
@@ -416,7 +422,10 @@ export class ProviderDetail extends PopupMenu.PopupMenuSection {
     }
 
     private _updateCredits(summary: LimitResetCreditSummary | null): void {
-        const count = summary?.availableCount ?? 0;
+        // ngettext() passes the count to GLib as an unsigned 64-bit number, and throws for one that does
+        // not fit; a count from the service is used only when it is a safe whole number.
+        const reported = summary?.availableCount ?? 0;
+        const count = Number.isSafeInteger(reported) && reported > 0 ? reported : 0;
         this._credits.visible = summary !== null && count > 0;
         this._creditsNone.setText(creditsNoneText(summary));
         if (!summary || count === 0) {
@@ -425,12 +434,12 @@ export class ProviderDetail extends PopupMenu.PopupMenuSection {
         }
         this._credits.label.set_text(creditsMenuText(summary, count));
         this._credits.accessible_name = this._credits.label.text;
-        const key = JSON.stringify([count, summary.stale, summary.fetchedAt, summary.credits]);
+        const credits = summary.credits.slice(0, MAX_CREDIT_ROWS);
+        const key = JSON.stringify([count, summary.stale, summary.fetchedAt, credits]);
         if (key === this._creditsKey)
             return;
         this._creditsKey = key;
         this._credits.menu.removeAll();
-        const credits = summary.credits;
         if (credits.length < count) {
             const note = new InfoItem();
             if (credits.length)

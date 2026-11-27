@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from tokengrill.core.json_util import clamp_fraction, is_record, number_at, record_at, string_at, to_epoch_ms
+from tokengrill.core.limits import MAX_LISTED
 from tokengrill.core.types import CanonicalQuotaWindow, UsageWindow
 from tokengrill.providers.windows import FIVE_HOURS, WEEK, window_label
 
@@ -97,7 +98,8 @@ def _limit_windows(limits: object, legacy_keys: set[str], present: set[Canonical
     scoped: list[UsageWindow] = [
         {**entry.window, "canonicalWindow": "other"} for entry in entries if entry.scope and id(entry) not in used
     ]
-    return [entry.window for entry in fills.values()] + scoped
+    # A response may list any number of scoped limits; the reading keeps as many as the popup can show.
+    return [entry.window for entry in fills.values()] + scoped[:MAX_LISTED]
 
 
 def normalize_claude_usage(payload: object) -> list[UsageWindow]:
