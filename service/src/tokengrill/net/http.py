@@ -51,12 +51,11 @@ ALLOWED_HOSTS: frozenset[str] = frozenset(
         *KIRO_SERVICE_HOSTS,
     }
 )
-KIRO_OIDC_HOST = re.compile(r"oidc\.[a-z0-9-]+\.amazonaws\.com")
 _REASON = re.compile(r"[A-Za-z][A-Za-z0-9_.-]{0,79}")
 
 
 def is_allowed_host(host: str) -> bool:
-    return host in ALLOWED_HOSTS or KIRO_OIDC_HOST.fullmatch(host) is not None
+    return host in ALLOWED_HOSTS
 
 
 def _url_allowed(url: str) -> bool:

@@ -1,22 +1,19 @@
 """Kiro usage limits from the kiro-cli sign-in."""
 
 import hashlib
-import time
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
-from tokengrill.core.errors import TRANSIENT_CODES, ServiceError
-from tokengrill.core.json_util import is_record, number_at, string_at
+from tokengrill.core.errors import ServiceError
 from tokengrill.core.paths import provider_paths
 from tokengrill.core.types import ProviderInstance, ProviderSnapshot, empty_snapshot
 from tokengrill.providers.base import CollectorContext, LimitsUpdate, collect_limits
 from tokengrill.providers.kiro.auth import (
     KiroAuth,
-    is_kiro_refreshable,
     is_kiro_token_fresh,
     kiro_database_stamp,
     read_kiro_auth,
 )
-from tokengrill.providers.kiro.endpoints import kiro_oidc_endpoint, kiro_usage_request_body, kiro_usage_url
+from tokengrill.providers.kiro.endpoints import kiro_usage_request_body, kiro_usage_url
 from tokengrill.providers.kiro.normalize import KiroUsage, normalize_kiro_usage
 from tokengrill.providers.kiro.usage_policy import KiroRejectedTokens, kiro_usage_error
 
@@ -43,9 +40,6 @@ class KiroCollector:
     def __init__(self) -> None:
         # Stored sign-ins, re-read only when the database changes on disk. A failed read is not cached.
         self._stored: dict[str, _Stored] = {}
-        # Tokens refreshed here. kiro-cli's store is opened read-only, so a refreshed token stays valid
-        # only while kiro-cli still holds the sign-in it came from.
-        self._refreshed: dict[str, tuple[str, KiroAuth]] = {}
         self._rejected = KiroRejectedTokens()
 
     async def collect(
@@ -78,7 +72,7 @@ class KiroCollector:
             raise known
         self._rejected.forget(instance["id"])
         try:
-            return await self._fetch_limits(instance, ctx, stored.auth, stored.fingerprint)
+            return await self._fetch_limits(ctx, stored.auth)
         except ServiceError as error:
             self._rejected.remember(instance["id"], stored.fingerprint, error)
             raise
@@ -94,10 +88,13 @@ class KiroCollector:
         self._stored[path] = entry
         return entry
 
-    async def _fetch_limits(
-        self, instance: ProviderInstance, ctx: CollectorContext, stored: KiroAuth, fingerprint: str
-    ) -> KiroUsage:
-        auth = await self._fresh_auth(instance, ctx, stored, fingerprint)
+    async def _fetch_limits(self, ctx: CollectorContext, stored: KiroAuth) -> KiroUsage:
+        # Token Grill never refreshes a kiro-cli sign-in. AWS SSO-OIDC replaces the refresh token on each
+        # refresh and rejects the old one, and kiro-cli deletes its sign-in when its own refresh is then
+        # rejected, so a refresh here would sign kiro-cli out. Only kiro-cli renews its sign-in.
+        if not is_kiro_token_fresh(stored.expires_at):
+            raise _auth_expired()
+        auth = stored
         try:
             payload = await ctx.http.request_json(
                 "POST",
@@ -116,49 +113,3 @@ class KiroCollector:
         if not usage.windows:
             raise ServiceError("response-shape", "net.no-usage")
         return usage
-
-    async def _fresh_auth(
-        self, instance: ProviderInstance, ctx: CollectorContext, stored: KiroAuth, fingerprint: str
-    ) -> KiroAuth:
-        refreshed = self._refreshed.get(instance["id"])
-        if (
-            refreshed is not None
-            and refreshed[0] == fingerprint
-            and refreshed[1].expires_at >= stored.expires_at
-            and is_kiro_token_fresh(refreshed[1].expires_at)
-        ):
-            return refreshed[1]
-        if is_kiro_token_fresh(stored.expires_at):
-            return stored
-        if not is_kiro_refreshable(stored):
-            raise _auth_expired()
-        try:
-            payload = await ctx.http.request_json(
-                "POST",
-                kiro_oidc_endpoint(stored.region),
-                {"Content-Type": "application/json"},
-                {
-                    "clientId": stored.client_id,
-                    "clientSecret": stored.client_secret,
-                    "grantType": "refresh_token",
-                    "refreshToken": stored.refresh_token,
-                },
-            )
-        except ServiceError as error:
-            if error.code in TRANSIENT_CODES:
-                raise
-            raise _auth_expired() from None
-        access_token = string_at(payload, "accessToken") if is_record(payload) else None
-        expires_in = number_at(payload, "expiresIn") if is_record(payload) else None
-        if not is_record(payload) or not access_token or expires_in is None:
-            raise _auth_expired()
-        refresh_token = string_at(payload, "refreshToken") or stored.refresh_token
-        auth = replace(
-            stored,
-            access_token=access_token,
-            refresh_token=refresh_token,
-            expires_at=time.time() * 1000 + expires_in * 1000,
-        )
-        # Kept in memory only: the kiro-cli database is never written.
-        self._refreshed[instance["id"]] = (fingerprint, auth)
-        return auth

@@ -1,4 +1,4 @@
-"""The kiro-cli sign-in, read from its SQLite database and refreshed in memory only."""
+"""The kiro-cli sign-in, read from its SQLite database. Only kiro-cli itself renews it."""
 
 import sqlite3
 import time
@@ -140,4 +140,5 @@ async def kiro_credential_status(instance: ProviderInstance) -> CredentialStatus
         return credential_error_status(error)
     if is_kiro_token_fresh(auth.expires_at):
         return "authenticated"
-    return "expired-refreshable" if is_kiro_refreshable(auth) else "login-required"
+    # Only kiro-cli renews an expired token; Token Grill does not.
+    return "expired" if is_kiro_refreshable(auth) else "login-required"

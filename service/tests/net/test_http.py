@@ -43,14 +43,14 @@ async def test_rejects_unknown_host() -> None:
     assert seen == []
 
 
-async def test_accepts_kiro_oidc_host() -> None:
+async def test_refuses_the_kiro_oidc_host() -> None:
+    """The service never refreshes a kiro-cli sign-in, so the AWS token host is not on the list."""
     transport, seen = _recording(httpx.Response(200, json={"ok": True}))
-    result = await _client(transport).request_json("POST", "https://oidc.us-east-1.amazonaws.com/token", {}, {"a": 1})
-    assert result == {"ok": True}
-    assert len(seen) == 1
-    assert is_allowed_host("oidc.eu-central-1.amazonaws.com")
-    assert not is_allowed_host("oidc.us-east-1.amazonaws.com.evil.com")
-    assert not is_allowed_host("oidc.US-east-1.amazonaws.com")
+    with pytest.raises(ServiceError) as err:
+        await _client(transport).request_json("POST", "https://oidc.us-east-1.amazonaws.com/token", {}, {"a": 1})
+    assert err.value.message_id == "net.not-allowed"
+    assert seen == []
+    assert not is_allowed_host("oidc.eu-central-1.amazonaws.com")
     assert "codewhisperer.us-east-1.amazonaws.com" in ALLOWED_HOSTS
     assert "opencode.ai" in ALLOWED_HOSTS
 

@@ -1,7 +1,5 @@
 """Request addresses of the Kiro regions."""
 
-import re
-
 from tokengrill.core.errors import ServiceError
 
 # GetUsageLimits is served by the Amazon Q endpoint of these regions only.
@@ -16,8 +14,6 @@ SERVICE_HOSTS: dict[str, str] = {
     "us-isof-east-1": "q.us-isof-east-1.csp.hci.ic.gov",
 }
 
-_REGION = re.compile(r"[a-z0-9-]+")
-
 
 def is_kiro_service_region(region: str) -> bool:
     return region in SERVICE_HOSTS
@@ -28,12 +24,6 @@ def kiro_usage_url(region: str) -> str:
     if host is None:
         raise ServiceError("auth-invalid", "kiro.region-unsupported", name=region)
     return f"https://{host}/"
-
-
-def kiro_oidc_endpoint(region: str) -> str:
-    if _REGION.fullmatch(region) is None:
-        raise ServiceError("auth-invalid", "kiro.region-invalid")
-    return f"https://oidc.{region}.amazonaws.com/token"
 
 
 def kiro_usage_request_body(profile_arn: str | None) -> dict[str, object]:

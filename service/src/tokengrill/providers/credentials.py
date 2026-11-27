@@ -14,6 +14,7 @@ MAX_CREDENTIAL_BYTES = 1024 * 1024
 # The answers the preferences show for credentials they cannot check by reading a single file.
 CredentialStatus = Literal[
     "authenticated",
+    "expired",
     "expired-refreshable",
     "expired-external",
     "login-required",

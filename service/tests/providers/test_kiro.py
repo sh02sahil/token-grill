@@ -21,7 +21,6 @@ from tokengrill.providers.kiro.auth import (
 from tokengrill.providers.kiro.collector import KiroCollector
 from tokengrill.providers.kiro.endpoints import (
     SERVICE_HOSTS,
-    kiro_oidc_endpoint,
     kiro_usage_request_body,
     kiro_usage_url,
 )
@@ -36,7 +35,6 @@ from tokengrill.storage.checkpoints import CheckpointStore
 
 
 def test_request_urls_cover_commercial_govcloud_and_iso_partitions() -> None:
-    assert kiro_oidc_endpoint("us-east-1") == "https://oidc.us-east-1.amazonaws.com/token"
     assert kiro_usage_url("us-east-1") == "https://codewhisperer.us-east-1.amazonaws.com/"
     assert kiro_usage_url("eu-central-1") == "https://q.eu-central-1.amazonaws.com/"
     assert kiro_usage_url("us-gov-west-1") == "https://q.us-gov-west-1.amazonaws.com/"
@@ -44,17 +42,13 @@ def test_request_urls_cover_commercial_govcloud_and_iso_partitions() -> None:
     with pytest.raises(ServiceError) as unsupported:
         kiro_usage_url("ap-south-1")
     assert unsupported.value.code == "auth-invalid"
-    with pytest.raises(ServiceError) as invalid:
-        kiro_oidc_endpoint("us-east-1.evil.example/")
-    assert invalid.value.code == "auth-invalid"
-    with pytest.raises(ServiceError):
-        kiro_oidc_endpoint("us-east-1\n")
 
 
-def test_every_service_host_and_oidc_host_is_allowed_by_the_client() -> None:
+def test_every_service_host_is_allowed_and_no_token_host_is() -> None:
     assert sorted(SERVICE_HOSTS.values()) == sorted(KIRO_SERVICE_HOSTS)
     assert all(is_allowed_host(host) for host in SERVICE_HOSTS.values())
-    assert is_allowed_host("oidc.eu-central-1.amazonaws.com")
+    # Token Grill never refreshes a kiro-cli sign-in, so it has no reason to reach AWS SSO-OIDC.
+    assert not is_allowed_host("oidc.us-east-1.amazonaws.com")
 
 
 def test_usage_request_sends_its_parameters_in_the_json_body() -> None:
@@ -492,61 +486,24 @@ async def test_an_expired_token_without_refresh_material_is_auth_expired_and_sen
     assert calls == []
 
 
-async def test_an_expired_token_is_refreshed_in_memory_and_the_database_is_untouched(tmp_path: Path) -> None:
+async def test_an_expired_token_is_never_refreshed_and_the_database_is_untouched(tmp_path: Path) -> None:
+    """AWS SSO-OIDC replaces the refresh token on each refresh, so a refresh by Token Grill would leave
+    kiro-cli with a rejected token, and kiro-cli deletes its sign-in when its own refresh is rejected."""
     path = write_database(tmp_path / "home", expires_at=1000, refreshable=True)
     before = path.read_bytes()
-    before_listing = sorted(p.name for p in path.parent.iterdir())
     calls: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         calls.append(request)
-        if request.url.host == "oidc.us-east-1.amazonaws.com":
-            return httpx.Response(
-                200, json={"accessToken": "fresh-token", "expiresIn": 3600, "refreshToken": "refresh-2"}
-            )
         return httpx.Response(200, json=USAGE)
 
-    collector = KiroCollector()
-    instance = make_instance(tmp_path / "home")
-    for _ in range(2):
-        snap = await collector.collect(
-            instance, empty_snapshot("acct"), make_ctx(tmp_path, httpx.MockTransport(handler))
-        )
-        assert snap["state"] == "ready"
-    hosts = [call.url.host for call in calls]
-    assert hosts == [
-        "oidc.us-east-1.amazonaws.com",
-        "codewhisperer.us-east-1.amazonaws.com",
-        "codewhisperer.us-east-1.amazonaws.com",
-    ]
-    refresh = json.loads(calls[0].content)
-    assert refresh == {
-        "clientId": "client-1",
-        "clientSecret": "secret-1",
-        "grantType": "refresh_token",
-        "refreshToken": "refresh-1",
-    }
-    assert str(calls[0].url) == "https://oidc.us-east-1.amazonaws.com/token"
-    assert calls[1].headers["authorization"] == "Bearer fresh-token"
+    snap = await KiroCollector().collect(
+        make_instance(tmp_path / "home"), empty_snapshot("acct"), make_ctx(tmp_path, httpx.MockTransport(handler))
+    )
+    assert calls == []
+    assert snap["errorInfo"] is not None
+    assert snap["errorInfo"]["code"] == "auth-expired"
     assert path.read_bytes() == before
-    assert sorted(p.name for p in path.parent.iterdir()) == before_listing
-
-
-async def test_a_refresh_the_service_rejects_is_auth_expired_but_an_outage_is_not(tmp_path: Path) -> None:
-    write_database(tmp_path / "home", expires_at=1000, refreshable=True)
-    instance = make_instance(tmp_path / "home")
-    rejected = httpx.MockTransport(lambda r: httpx.Response(400, json={"error": "invalid_grant"}))
-    snap = await KiroCollector().collect(instance, empty_snapshot("acct"), make_ctx(tmp_path, rejected))
-    assert snap["errorInfo"] is not None
-    assert snap["errorInfo"]["code"] == "auth-expired"
-    limited = httpx.MockTransport(lambda r: httpx.Response(429, json={}))
-    snap = await KiroCollector().collect(instance, empty_snapshot("acct"), make_ctx(tmp_path, limited))
-    assert snap["errorInfo"] is not None
-    assert snap["errorInfo"]["code"] == "rate-limited"
-    malformed = httpx.MockTransport(lambda r: httpx.Response(200, json={"accessToken": "x"}))
-    snap = await KiroCollector().collect(instance, empty_snapshot("acct"), make_ctx(tmp_path, malformed))
-    assert snap["errorInfo"] is not None
-    assert snap["errorInfo"]["code"] == "auth-expired"
 
 
 async def test_credential_status_covers_fresh_refreshable_expired_missing_and_unreadable(tmp_path: Path) -> None:
@@ -554,7 +511,7 @@ async def test_credential_status_covers_fresh_refreshable_expired_missing_and_un
     write_database(tmp_path / "fresh")
     assert await kiro_credential_status(make_instance(tmp_path / "fresh")) == "authenticated"
     write_database(tmp_path / "refresh", expires_at=1000, refreshable=True)
-    assert await kiro_credential_status(make_instance(tmp_path / "refresh")) == "expired-refreshable"
+    assert await kiro_credential_status(make_instance(tmp_path / "refresh")) == "expired"
     write_database(tmp_path / "old", expires_at=1000)
     assert await kiro_credential_status(make_instance(tmp_path / "old")) == "login-required"
     (tmp_path / "bad").mkdir()
