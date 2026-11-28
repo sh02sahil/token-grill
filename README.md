@@ -31,22 +31,16 @@ These are the functions of the top bar and the popup:
   your terminal with the login command of that account, for example
   `codex login` with `CODEX_HOME` set to the home of the account. Token Grill
   does not use the Codex or Claude refresh tokens itself: each is used only
-  once, so a renewal by Token Grill would sign out the CLI. The renewal
-  settings below let the CLI renew its own sign-in instead.
-- **Renew Expired Claude Code Sign-Ins** in Preferences (General, Updates) is
-  off by default. When you turn it on, the service runs the installed
-  `claude auth status` for an expired Claude Code sign-in. Claude Code renews
-  the sign-in and saves it, and the service reads it again.
-- **Renew Expired Codex Sign-Ins** in Preferences (General, Updates) is off
-  by default. When you turn it on, the service starts the installed Codex app
-  server for an expired Codex CLI sign-in. Codex renews the sign-in and saves
-  it, and the service reads it again. Codex opens no conversation, runs no
-  prompt, and starts no MCP servers.
-- **Renew Expired Antigravity Sign-Ins** in Preferences (General, Updates) is
-  off by default. When you turn it on, the service starts the installed agy
-  for an expired agy sign-in. agy renews the sign-in and saves it, and the
-  service reads it again. agy opens no conversation and runs no prompt, but it
-  starts the MCP servers that you set up in agy.
+  once, so a renewal by Token Grill would sign out the CLI. The switch below
+  lets the CLI renew its own sign-in instead.
+- **Renew Expired Sign-In** is a switch of each Claude Code, Codex CLI, and
+  agy account, in the account's preferences and in the popup. It is off by
+  default. When you turn it on and the sign-in of that account has expired,
+  the service starts the installed CLI of the account: `claude auth status`,
+  the Codex app server, or `agy acp`. The CLI renews the sign-in and saves it,
+  and the service reads it again. No CLI opens a conversation or runs a
+  prompt. agy starts the MCP servers that you set up in agy; Claude Code and
+  Codex start none.
 - **Usage Pace** in the account preferences shows whether a limit is used
   faster or slower than its period passes. The popup shows one line for each
   limit, and the top bar shows an icon: a flame for a fast pace, a check mark
@@ -232,12 +226,13 @@ The Antigravity quota service gives data only when the User-Agent contains
 the word Antigravity. Thus, the User-Agent names all the services that Token Grill
 monitors.
 
-Token Grill starts no other program by itself, except when you turn on the
-Claude Code, the Codex, or the Antigravity renewal. Only when you click **Sign In Again in a Terminal**, the
-extension opens your terminal with the login command of that account's CLI,
-from a fixed list in the extension. Only when you turn on **Renew Expired
-Claude Code Sign-Ins** in Preferences (it is off by default), the service runs
-`claude auth status` by itself for an expired Claude Code sign-in:
+Token Grill starts no other program by itself, except for an account whose
+**Renew Expired Sign-In** switch you turned on. Only when you click **Sign In
+Again in a Terminal**, the extension opens your terminal with the login
+command of that account's CLI, from a fixed list in the extension. Only when
+you turn on **Renew Expired Sign-In** for a Claude Code account (it is off by
+default), the service runs `claude auth status` by itself for an expired
+sign-in of that account:
 
 - The command has no shell and no terminal. `CLAUDE_CONFIG_DIR` is the folder
   of the credentials file, so the right account renews.
@@ -256,9 +251,9 @@ Claude Code Sign-Ins** in Preferences (it is off by default), the service runs
   OpenCode. The CLI must be on the `PATH` or in `~/.local/bin/claude`. A
   revoked sign-in still needs **Sign In Again in a Terminal**.
 
-Only when you turn on **Renew Expired Codex Sign-Ins** in Preferences (it is
+Only when you turn on **Renew Expired Sign-In** for a Codex CLI account (it is
 off by default), the service starts `codex app-server` by itself for an
-expired Codex CLI sign-in:
+expired sign-in of that account:
 
 - The command has no shell and no terminal. `CODEX_HOME` is the folder of the
   `auth.json` file, so the right account renews. `OPENAI_API_KEY` and
@@ -276,9 +271,9 @@ expired Codex CLI sign-in:
   CLI must be on the `PATH` or in `~/.local/bin/codex`. A revoked sign-in
   still needs **Sign In Again in a Terminal**.
 
-Only when you turn on **Renew Expired Antigravity Sign-Ins** in Preferences (it
+Only when you turn on **Renew Expired Sign-In** for an Antigravity account (it
 is off by default), the service starts `agy acp` by itself for an expired agy
-sign-in:
+sign-in of that account:
 
 - The command has no shell and no terminal. `DISPLAY` and `WAYLAND_DISPLAY`
   are removed and `BROWSER` does nothing, so a sign-in that cannot be renewed

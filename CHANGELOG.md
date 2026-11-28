@@ -35,14 +35,18 @@
 - The journal diagnostics switch is no longer in the extension. The setting
   (`journalDiagnostics`) now belongs to the service. The README shows the
   command that sets it.
-- Claude Code: Preferences -> General -> Renew Expired Claude Code Sign-Ins
-  (the service setting `claudeRenewal`) is off by default. When you turn it
-  on and a Claude Code sign-in has expired, the service runs the installed
-  `claude auth status` for that account. Claude Code renews the sign-in and
-  saves it, and the service reads it again. This keeps the readings current
-  when you mostly use Claude on another computer. After a failure, the next
-  attempt waits 5 minutes, and the wait doubles up to 1 hour. A revoked
-  sign-in still needs Sign In Again in a Terminal.
+- Renew Expired Sign-In: a switch of each Claude Code, Codex CLI, and agy
+  account, in the account's preferences and in the popup. It is off by
+  default. When you turn it on and the sign-in of that account has expired,
+  the service starts the installed CLI of the account in the background:
+  `claude auth status`, the Codex app server, or `agy acp`. The CLI renews
+  the sign-in and saves it, and the service reads it again. This keeps the
+  readings current when you mostly use a service on another computer, and you
+  no longer need to open agy in a terminal to renew its sign-in. No CLI opens
+  a conversation or runs a prompt; agy starts the MCP servers that you set up
+  in it. After a failure, the next attempt waits 5 minutes, and the wait
+  doubles up to 1 hour. A revoked sign-in still needs Sign In Again in a
+  Terminal.
 - Kiro and Cursor no longer need the Gda library. The extension no longer
   needs libsecret.
 - A history scan that stops in the middle of a file, for example at a screen
@@ -59,23 +63,10 @@
   hours.
 - `tokengrill uninstall --purge` names each folder that it could not delete
   and exits with an error, instead of reporting that everything is deleted.
-- Codex: Preferences -> General -> Renew Expired Codex Sign-Ins (the service
-  setting `codexRenewal`) is off by default. When you turn it on and a Codex
-  CLI sign-in has expired, the service starts the installed Codex app server
-  for that account and asks it for the account. Codex renews the sign-in and
-  saves it, and the service reads it again. Codex opens no conversation and
-  runs no prompt. After a failure, the next attempt waits 5 minutes, and the
-  wait doubles up to 1 hour.
 - Kiro: Token Grill no longer renews an expired `kiro-cli` sign-in itself.
   AWS replaces the refresh token at each renewal, so a renewal by Token Grill
   could sign `kiro-cli` out. When the popup shows that the sign-in has
   expired, use `kiro-cli`, or sign in again with `kiro-cli login`.
-- Antigravity: Preferences -> General -> Renew Expired Antigravity Sign-Ins
-  (the service setting `antigravityRenewal`) is off by default. When you turn
-  it on and the agy sign-in has expired, the service starts the installed agy
-  in the background and asks it to renew its sign-in. You no longer need to
-  open agy in a terminal for that. agy opens no conversation and runs no
-  prompt, but it starts the MCP servers that you set up in agy.
 - Antigravity: the usage service now sends a limit for each model instead of
   the five-hour and weekly limits. Token Grill shows each model as its own
   limit. Before, the refresh failed with "The service response did not

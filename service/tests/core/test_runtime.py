@@ -91,7 +91,6 @@ class FakeCollector:
         self.calls = 0
         self.manual: list[bool] = []
         self.history: list[bool] = []
-        self.claude_renewal: list[bool] = []
         self.instances: list[ProviderInstance] = []
         self.percent = 0.8
         self.fail_with: ServiceError | None = None
@@ -109,7 +108,6 @@ class FakeCollector:
         self.instances.append(instance)
         self.manual.append(ctx.manual)
         self.history.append(ctx.history_enabled)
-        self.claude_renewal.append(ctx.claude_renewal)
         self.started.set()
         async with self._called:
             self._called.notify_all()
@@ -247,16 +245,16 @@ async def test_manual_flag_reaches_the_collector(rig: Rig) -> None:
     assert rig.fake.manual == [True]
 
 
-async def test_claude_renewal_follows_the_setting(rig: Rig) -> None:
+async def test_the_renewal_switch_of_an_account_reaches_its_collector(rig: Rig) -> None:
     await rig.runtime.start()
     await rig.runtime.refresh(ACCOUNT_ID)
-    await rig.runtime.set_settings({"claudeRenewal": True})
+    assert await rig.runtime.update_account({"id": ACCOUNT_ID, "renewSignIn": True}) == {}
     rig.clock.now += 100_000
     await rig.runtime.refresh(ACCOUNT_ID)
-    await rig.runtime.set_settings({"claudeRenewal": False})
+    assert await rig.runtime.update_account({"id": ACCOUNT_ID, "renewSignIn": False}) == {}
     rig.clock.now += 100_000
     await rig.runtime.refresh(ACCOUNT_ID)
-    assert rig.fake.claude_renewal == [False, True, False]
+    assert [instance["renewSignIn"] for instance in rig.fake.instances] == [False, True, False]
 
 
 async def test_outcomes_follow_the_refresh(rig: Rig) -> None:

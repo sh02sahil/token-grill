@@ -28,6 +28,14 @@ const COMMANDS: Record<LoginApp, LoginCommand> = {
     'copilot-cli': {argv: ['copilot'], homeVariable: null, inSession: true},
 };
 
+// The service can start the CLI of these apps to renew an expired sign-in, when the account's switch is on:
+// claude auth status, codex app-server, or agy acp (the service's renewal modules).
+export function canRenewSignIn(provider: ProviderInstance): boolean {
+    return (provider.kind === 'claude' && provider.app === 'claude-code') ||
+        (provider.kind === 'codex' && provider.app === 'codex-cli') ||
+        (provider.kind === 'antigravity' && provider.app === 'antigravity');
+}
+
 // The app comes from the bus, so only the table's own keys count.
 export function hasLoginCommand(app: AccountApp): app is LoginApp {
     return Object.hasOwn(COMMANDS, app);

@@ -9,7 +9,7 @@ import {providerMetadata} from '../core/providerMetadata.js';
 import {isShown, topBarSummary} from '../core/topBar.js';
 import type {PrefsContext} from './context.js';
 import {TRANSLATOR} from './translator.js';
-import {bindServiceNumber, bindServiceSwitch} from './widgets.js';
+import {bindServiceNumber} from './widgets.js';
 
 interface ToggleRowOptions {
     key: string;
@@ -83,24 +83,6 @@ export class GeneralPage extends Adw.PreferencesPage {
         });
         bindServiceNumber(context, 'refreshIntervalSeconds', interval);
         updates.add(interval);
-        const renewal = new Adw.SwitchRow({
-            title: _('Renew Expired Claude Code Sign-Ins'),
-            subtitle: _('When a sign-in has expired, the service runs claude auth status so Claude Code renews it'),
-        });
-        bindServiceSwitch(context, 'claudeRenewal', renewal);
-        updates.add(renewal);
-        const codexRenewal = new Adw.SwitchRow({
-            title: _('Renew Expired Codex Sign-Ins'),
-            subtitle: _('When a sign-in has expired, the service starts the Codex app server so Codex renews it'),
-        });
-        bindServiceSwitch(context, 'codexRenewal', codexRenewal);
-        updates.add(codexRenewal);
-        const agyRenewal = new Adw.SwitchRow({
-            title: _('Renew Expired Antigravity Sign-Ins'),
-            subtitle: _('When the agy sign-in has expired, the service starts agy so it renews the sign-in'),
-        });
-        bindServiceSwitch(context, 'antigravityRenewal', agyRenewal);
-        updates.add(agyRenewal);
         const more = new Adw.ExpanderRow({title: _('More Options')});
         more.add_row(toggleRow(settings, {
             key: 'popup-account-picker',

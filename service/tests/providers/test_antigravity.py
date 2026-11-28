@@ -211,7 +211,7 @@ FUTURE_MS = int(time.time() * 1000) + 3_600_000
 PAST_MS = int(time.time() * 1000) - 3_600_000
 
 
-def make_instance(home: Path, live: bool = True) -> ProviderInstance:
+def make_instance(home: Path, live: bool = True, renew: bool = False) -> ProviderInstance:
     return {
         "schemaVersion": 2,
         "id": "acct",
@@ -229,6 +229,7 @@ def make_instance(home: Path, live: bool = True) -> ProviderInstance:
         "topBar": {"automatic": True, "limits": []},
         "lowBalance": None,
         "showPace": True,
+        "renewSignIn": renew,
     }
 
 
@@ -630,14 +631,13 @@ for line in sys.stdin:
 """
 
 
-def _agy_ctx(tmp_path: Path, seen: list[httpx.Request], *, renewal: bool) -> CollectorContext:
+def _agy_ctx(tmp_path: Path, seen: list[httpx.Request]) -> CollectorContext:
     return CollectorContext(
         http=HttpClient(transport=httpx.MockTransport(quota_handler(seen))),
         pricing={},
         aggregates=AggregateStore(tmp_path / "agg.json"),
         checkpoints=CheckpointStore(tmp_path / "cp.json"),
         balances=BalanceStore(tmp_path / "balances.json"),
-        antigravity_renewal=renewal,
     )
 
 
@@ -674,7 +674,7 @@ async def test_agy_renews_an_expired_keyring_sign_in_when_the_user_turned_it_on(
     state = _install_fake_agy(tmp_path, monkeypatch)
     seen: list[httpx.Request] = []
     snap = await AntigravityCollector().collect(
-        make_instance(tmp_path / "none"), empty_snapshot("acct"), _agy_ctx(tmp_path, seen, renewal=True)
+        make_instance(tmp_path / "none", renew=True), empty_snapshot("acct"), _agy_ctx(tmp_path, seen)
     )
     assert snap["errorInfo"] is None
     calls = _agy_calls(state)
@@ -687,7 +687,7 @@ async def test_agy_renews_an_expired_keyring_sign_in_when_the_user_turned_it_on(
 async def test_agy_is_not_started_when_renewal_is_off(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     state = _install_fake_agy(tmp_path, monkeypatch)
     snap = await AntigravityCollector().collect(
-        make_instance(tmp_path / "none"), empty_snapshot("acct"), _agy_ctx(tmp_path, [], renewal=False)
+        make_instance(tmp_path / "none"), empty_snapshot("acct"), _agy_ctx(tmp_path, [])
     )
     assert snap["errorInfo"] is not None
     assert snap["errorInfo"]["messageId"] == "antigravity.agy-expired"
@@ -697,7 +697,7 @@ async def test_agy_is_not_started_when_renewal_is_off(tmp_path: Path, monkeypatc
 async def test_agy_is_not_started_for_an_unknown_sign_in_kind(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     state = _install_fake_agy(tmp_path, monkeypatch, auth_method="enterprise")
     snap = await AntigravityCollector().collect(
-        make_instance(tmp_path / "none"), empty_snapshot("acct"), _agy_ctx(tmp_path, [], renewal=True)
+        make_instance(tmp_path / "none", renew=True), empty_snapshot("acct"), _agy_ctx(tmp_path, [])
     )
     assert snap["errorInfo"] is not None
     assert snap["errorInfo"]["messageId"] == "antigravity.agy-expired"
@@ -710,7 +710,7 @@ async def test_a_failed_agy_renewal_waits_before_the_next_try(tmp_path: Path, mo
     collector = AntigravityCollector()
     for _ in range(2):
         snap = await collector.collect(
-            make_instance(tmp_path / "none"), empty_snapshot("acct"), _agy_ctx(tmp_path, [], renewal=True)
+            make_instance(tmp_path / "none", renew=True), empty_snapshot("acct"), _agy_ctx(tmp_path, [])
         )
         assert snap["errorInfo"] is not None
         assert snap["errorInfo"]["messageId"] == "antigravity.agy-expired"
@@ -722,7 +722,7 @@ async def test_a_missing_agy_is_an_expired_sign_in(tmp_path: Path, monkeypatch: 
     monkeypatch.setenv("PATH", str(tmp_path / "empty"))
     monkeypatch.setattr(Path, "home", lambda: tmp_path / "nohome")
     snap = await AntigravityCollector().collect(
-        make_instance(tmp_path / "none"), empty_snapshot("acct"), _agy_ctx(tmp_path, [], renewal=True)
+        make_instance(tmp_path / "none", renew=True), empty_snapshot("acct"), _agy_ctx(tmp_path, [])
     )
     assert snap["errorInfo"] is not None
     assert snap["errorInfo"]["messageId"] == "antigravity.agy-expired"

@@ -101,6 +101,10 @@ export class Runtime implements IndicatorController {
         this._request(client => client.setAutomatic(providerId, on));
     }
 
+    setRenewSignIn(providerId: string, on: boolean): void {
+        this._request(client => client.updateAccount({id: providerId, renewSignIn: on}));
+    }
+
     // The command comes from the extension's own table; only the account home, one quoted
     // argument, comes from the account data.
     signIn(providerId: string): void {

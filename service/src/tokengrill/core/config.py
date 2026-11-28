@@ -94,9 +94,6 @@ def default_settings() -> Settings:
         "alertsEnabled": True,
         "alertStepPercent": DEFAULT_STEP_PERCENT,
         "journalDiagnostics": False,
-        "claudeRenewal": False,
-        "antigravityRenewal": False,
-        "codexRenewal": False,
     }
 
 
@@ -196,6 +193,7 @@ def normalize_provider(entry: object) -> list[ProviderInstance]:
             if isinstance(low, int | float) and not isinstance(low, bool) and low >= 0
             else None,
             "showPace": entry.get("showPace") is True,
+            "renewSignIn": entry.get("renewSignIn") is True,
         }
     ]
 
@@ -246,6 +244,7 @@ def new_provider(kind: ProviderKind, app: AccountApp, home: str) -> ProviderInst
         "topBar": {"automatic": True, "limits": []},
         "lowBalance": None,
         "showPace": False,
+        "renewSignIn": False,
     }
 
 
@@ -262,6 +261,7 @@ EDITABLE_FIELDS = (
     "topBar",
     "lowBalance",
     "showPace",
+    "renewSignIn",
 )
 
 _ReadField = Literal[
@@ -384,9 +384,6 @@ def _settings_from(source: dict[str, Any]) -> Settings:
         "alertsEnabled": source["alertsEnabled"] if isinstance(source.get("alertsEnabled"), bool) else True,
         "alertStepPercent": _bounded_int(source.get("alertStepPercent"), _STEP_RANGE, defaults["alertStepPercent"]),
         "journalDiagnostics": source.get("journalDiagnostics") is True,
-        "claudeRenewal": source.get("claudeRenewal") is True,
-        "antigravityRenewal": source.get("antigravityRenewal") is True,
-        "codexRenewal": source.get("codexRenewal") is True,
     }
 
 
@@ -403,7 +400,7 @@ def apply_settings_patch(current: Settings, patch: object) -> Settings:
         value = merged[key]
         if not (isinstance(value, int) and not isinstance(value, bool) and bounds[0] <= value <= bounds[1]):
             raise InvalidRequest(f"{key} must be a whole number from {bounds[0]} to {bounds[1]}")
-    for key in ("alertsEnabled", "journalDiagnostics", "claudeRenewal", "antigravityRenewal", "codexRenewal"):
+    for key in ("alertsEnabled", "journalDiagnostics"):
         if not isinstance(merged[key], bool):
             raise InvalidRequest(f"{key} must be true or false")
     return _settings_from(merged)
@@ -449,6 +446,14 @@ class ConfigStore:
             return {"schema": 1, "accounts": [], **default_settings()}
         accounts = value.get("accounts")
         entries = accounts if isinstance(accounts, list) else []
+        if value.get("claudeRenewal") is True:
+            # Service 0.1.3 had one renewal setting for all Claude Code accounts; each account has its own now.
+            entries = [
+                {**entry, "renewSignIn": True}
+                if is_record(entry) and entry.get("app") == "claude-code" and "renewSignIn" not in entry
+                else entry
+                for entry in entries
+            ]
         return {
             "schema": 1,
             "accounts": ordered_providers([p for entry in entries for p in normalize_provider(entry)]),

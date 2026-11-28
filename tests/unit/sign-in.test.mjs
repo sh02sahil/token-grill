@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {UNTRANSLATED} from './untranslated.mjs';
 import {errorText} from '../../build/tests/popup-model.mjs';
-import {execLine, signInCommand} from '../../build/tests/sign-in.mjs';
+import {canRenewSignIn, execLine, signInCommand} from '../../build/tests/sign-in.mjs';
 
 // The service says whether the account lives in the default home of its CLI.
 test('the default home signs in with the plain command', () => {
@@ -70,4 +70,15 @@ test('a percent sign in an account home cannot reach the field-code expansion', 
         const quoted = argv.map(arg => `'${arg.replaceAll("'", "'\\''")}'`).join(' ');
         assert.equal(expandFieldCodes(execLine(argv)), quoted, home);
     }
+});
+
+// The service starts only these CLIs to renew a sign-in; other apps, OpenCode among them, get no switch.
+test('only Claude Code, the Codex CLI and agy accounts can renew an expired sign-in', () => {
+    assert.equal(canRenewSignIn({kind: 'claude', app: 'claude-code'}), true);
+    assert.equal(canRenewSignIn({kind: 'codex', app: 'codex-cli'}), true);
+    assert.equal(canRenewSignIn({kind: 'antigravity', app: 'antigravity'}), true);
+    assert.equal(canRenewSignIn({kind: 'claude', app: 'opencode'}), false);
+    assert.equal(canRenewSignIn({kind: 'codex', app: 'opencode'}), false);
+    assert.equal(canRenewSignIn({kind: 'kiro', app: 'kiro-cli'}), false);
+    assert.equal(canRenewSignIn({kind: 'cursor', app: 'cursor-agent'}), false);
 });

@@ -91,6 +91,7 @@ class ProviderInstance(TypedDict):
     lowBalance: float | None
     # Whether the popup and the top bar show how fast the limits are used.
     showPace: bool
+    renewSignIn: bool
 
 
 class UsageWindow(TypedDict):
@@ -214,9 +215,6 @@ class Settings(TypedDict):
     alertsEnabled: bool
     alertStepPercent: int
     journalDiagnostics: bool
-    claudeRenewal: bool
-    antigravityRenewal: bool
-    codexRenewal: bool
 
 
 class ServiceState(TypedDict):

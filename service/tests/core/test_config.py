@@ -321,18 +321,28 @@ def test_missing_config_gives_the_defaults(tmp_path: Path) -> None:
         "alertsEnabled": True,
         "alertStepPercent": DEFAULT_STEP_PERCENT,
         "journalDiagnostics": False,
-        "claudeRenewal": False,
-        "antigravityRenewal": False,
-        "codexRenewal": False,
     }
     assert DEFAULT_STEP_PERCENT == 10
 
 
-def test_config_without_claude_renewal_reads_as_off(tmp_path: Path) -> None:
-    (tmp_path / "config.json").write_text(json.dumps({"schema": 1, "accounts": [], "journalDiagnostics": True}))
+def test_an_account_without_the_renewal_switch_reads_as_off(tmp_path: Path) -> None:
+    (tmp_path / "config.json").write_text(json.dumps({"schema": 1, "accounts": [entry()], "journalDiagnostics": True}))
     config = ConfigStore(tmp_path / "config.json").load()
-    assert config["claudeRenewal"] is False
+    assert config["accounts"][0]["renewSignIn"] is False
     assert config["journalDiagnostics"] is True
+
+
+def test_the_renewal_setting_of_service_013_turns_on_each_claude_code_account(tmp_path: Path) -> None:
+    accounts = [
+        entry(id="c1", kind="claude", app="claude-code", accountHome="~/.claude"),
+        entry(id="c2", kind="claude", app="claude-code", accountHome="~/.claude2", renewSignIn=False),
+        entry(id="x", kind="codex", app="codex-cli"),
+    ]
+    (tmp_path / "config.json").write_text(json.dumps({"schema": 1, "accounts": accounts, "claudeRenewal": True}))
+    config = ConfigStore(tmp_path / "config.json").load()
+    # A choice made for the account itself stays; the old setting covered Claude Code only.
+    assert {a["id"]: a["renewSignIn"] for a in config["accounts"]} == {"c1": True, "c2": False, "x": False}
+    assert "claudeRenewal" not in config
 
 
 def test_corrupt_config_is_kept_aside(tmp_path: Path) -> None:

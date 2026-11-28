@@ -32,6 +32,7 @@ export interface IndicatorController {
     selectService(kind: ProviderKind): void;
     toggleLimit(providerId: string, key: string): void;
     setAutomatic(providerId: string, on: boolean): void;
+    setRenewSignIn(providerId: string, on: boolean): void;
     signIn(providerId: string): void;
     openPreferences(): void;
     setPaused(paused: boolean): void;
@@ -240,6 +241,7 @@ export class TokenGrillIndicator extends PanelMenu.Button {
             refresh: provider => controller.refreshProvider(provider.id),
             toggleLimit: (provider, key) => controller.toggleLimit(provider.id, key),
             setAutomatic: (provider, on) => controller.setAutomatic(provider.id, on),
+            setRenewSignIn: (provider, on) => controller.setRenewSignIn(provider.id, on),
             signIn: provider => controller.signIn(provider.id),
         });
         menu.addMenuItem(detail);

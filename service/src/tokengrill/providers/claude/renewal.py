@@ -27,7 +27,7 @@ class ClaudeTokenLoader:
         self._waits: dict[str, float] = {}
 
     async def load(self, instance: ProviderInstance, ctx: CollectorContext) -> str:
-        if not ctx.claude_renewal:
+        if not instance["renewSignIn"]:
             return await load_claude_access_token(instance)
         path = Path(provider_paths(instance)["authFile"])
         # Two account homes can reach one file through a link; the key is the file itself.

@@ -15,7 +15,7 @@ import {formatText} from '../core/i18n.js';
 import {paceLine, type PaceLine} from '../core/pace.js';
 import {errorText, historySummary, refreshStatusText, windowCaption} from '../core/popupModel.js';
 import {providerMetadata} from '../core/providerMetadata.js';
-import {signInCommand} from '../core/signIn.js';
+import {canRenewSignIn, signInCommand} from '../core/signIn.js';
 import {durationUntil, formatDuration, tidyClock} from '../core/timeMath.js';
 import {isShown} from '../core/topBar.js';
 import type {
@@ -33,6 +33,7 @@ interface ProviderDetailActions {
     refresh: (provider: ProviderInstance) => void;
     toggleLimit: (provider: ProviderInstance, key: string) => void;
     setAutomatic: (provider: ProviderInstance, on: boolean) => void;
+    setRenewSignIn: (provider: ProviderInstance, on: boolean) => void;
     signIn: (provider: ProviderInstance) => void;
 }
 
@@ -308,6 +309,7 @@ export class ProviderDetail extends PopupMenu.PopupMenuSection {
     private _limitKeys = '';
     private _balance: InfoItem;
     private _automatic: PopupMenu.PopupSwitchMenuItem;
+    private _renew: PopupMenu.PopupSwitchMenuItem;
     private _credits: PopupMenu.PopupSubMenuMenuItem;
     private _creditsNone: InfoItem;
     private _history: InfoItem;
@@ -327,10 +329,13 @@ export class ProviderDetail extends PopupMenu.PopupMenuSection {
         this._automatic = new PopupMenu.PopupSwitchMenuItem(_('Pick Automatically'), false);
         this._automatic.connectObject('toggled', (_item: PopupMenu.PopupSwitchMenuItem, state: boolean) =>
             this._withInstance(instance => this._actions.setAutomatic(instance, state)), this._automatic);
+        this._renew = new PopupMenu.PopupSwitchMenuItem(_('Renew Expired Sign-In'), false);
+        this._renew.connectObject('toggled', (_item: PopupMenu.PopupSwitchMenuItem, state: boolean) =>
+            this._withInstance(instance => this._actions.setRenewSignIn(instance, state)), this._renew);
         this._credits = new PopupMenu.PopupSubMenuMenuItem(_('Reset Credits'), false);
         this._creditsNone = new InfoItem();
         this._history = new InfoItem();
-        this._items = [this._identity, this._error, this._signIn, this._legend, this._balance, this._automatic, this._credits, this._creditsNone, this._history];
+        this._items = [this._identity, this._error, this._signIn, this._legend, this._balance, this._automatic, this._renew, this._credits, this._creditsNone, this._history];
         for (const item of this._items)
             this.addMenuItem(item);
     }
@@ -413,6 +418,8 @@ export class ProviderDetail extends PopupMenu.PopupMenuSection {
 
         this._error.setText(errorText(TRANSLATOR, snapshot, instance));
         this._signIn.visible = snapshot?.errorInfo?.recovery === 'reauthenticate' && signInCommand(instance, snapshot.homeIsDefault) !== null;
+        this._renew.visible = canRenewSignIn(instance);
+        this._renew.setToggleState(instance.renewSignIn);
         this._updateLimits(instance, snapshot, mode);
         const balance = snapshot?.balance ?? null;
         this._balance.setText(balance ? formatText(_('%s left - prepaid balance'), formatMoney(balance, 2)) : null);

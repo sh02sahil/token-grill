@@ -248,17 +248,29 @@ test('Preferences read and write the moved settings through the service', async 
     assert.match(general, /bindServiceNumber\(context, 'refreshIntervalSeconds', interval\)/);
     assert.match(notifications, /bindServiceNumber\(context, 'alertStepPercent', step\)/);
     assert.match(notifications, /bindServiceSwitch\(context, 'alertsEnabled', enabled\)/);
-    // Off unless the user turns it on: the service starts the Claude CLI only then.
-    assert.match(general, /bindServiceSwitch\(context, 'claudeRenewal', renewal\)/);
-    // The same for agy, which the service starts only when the user turned this on.
-    assert.match(general, /bindServiceSwitch\(context, 'antigravityRenewal', agyRenewal\)/);
-    assert.match(general, /bindServiceSwitch\(context, 'codexRenewal', codexRenewal\)/);
     assert.match(widgets, /client => client\.setSettings\(patch\)/);
     // The look stays in GSettings.
     for (const key of ['panel-display-style', 'panel-percentage-mode', 'panel-position', 'popup-account-picker'])
         assert.match(general, new RegExp(`key: '${key}'`));
     assert.match(accounts, /credentialLabel\(TRANSLATOR, state\)/);
     assert.match(accounts, /client => client\.credentialState\(provider\.id\)/);
+});
+
+test('the renewal switch belongs to each account, in its page and in the popup', async () => {
+    const [general, account, card, runtime] = await Promise.all([
+        read('src/prefs/generalPage.ts'), read('src/prefs/accountPage.ts'), read('src/shell/providerCard.ts'), read('src/runtime.ts'),
+    ]);
+    assert.doesNotMatch(general, /Renewal|Renew/);
+    // Shown only for accounts whose CLI the service can start, and off unless the user turns it on.
+    assert.match(account, /if \(canRenewSignIn\(provider\)\) \{/);
+    assert.match(account, /this\._apply\(\{renewSignIn: renew\.active\}\)/);
+    // The page follows a change made in the popup without sending it back.
+    assert.match(account, /this\._renew\.active = stored\.renewSignIn;/);
+    assert.match(account, /if \(renew\.active !== this\._provider\.renewSignIn\)/);
+    assert.match(card, /this\._renew\.visible = canRenewSignIn\(instance\);/);
+    assert.match(card, /this\._renew\.setToggleState\(instance\.renewSignIn\);/);
+    assert.match(card, /this\._actions\.setRenewSignIn\(instance, state\)/);
+    assert.match(runtime, /client\.updateAccount\(\{id: providerId, renewSignIn: on\}\)/);
 });
 
 test('a key that the keyring did not save shows the 0.4.1 alert', async () => {

@@ -32,7 +32,7 @@ class CodexTokenLoader:
         self._waits: dict[str, float] = {}
 
     async def load(self, instance: ProviderInstance, ctx: CollectorContext) -> str:
-        if not ctx.codex_renewal:
+        if not instance["renewSignIn"]:
             return await load_codex_access_token(instance)
         path = Path(provider_paths(instance)["authFile"])
         # Two account homes can reach one file through a link; the key is the file itself.

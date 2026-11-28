@@ -67,7 +67,6 @@ def _state() -> ServiceState:
             "alertsEnabled": True,
             "alertStepPercent": 10,
             "journalDiagnostics": False,
-            "claudeRenewal": False,
         },
         "accounts": [codex, deepseek, kiro],  # type: ignore[list-item]
         "snapshots": {

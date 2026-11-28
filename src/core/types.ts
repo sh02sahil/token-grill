@@ -72,6 +72,7 @@ export interface ProviderInstance {
     lowBalance: number | null;
     // Whether the popup and the top bar show how fast the limits are used.
     showPace: boolean;
+    renewSignIn: boolean;
 }
 
 // A new account as Preferences send it to the service, which fills in the rest as 0.4.1 newProvider() did.
@@ -182,9 +183,6 @@ export interface Settings {
     alertsEnabled: boolean;
     alertStepPercent: number;
     journalDiagnostics: boolean;
-    claudeRenewal: boolean;
-    antigravityRenewal: boolean;
-    codexRenewal: boolean;
 }
 
 export interface ServiceState {

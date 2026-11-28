@@ -90,7 +90,7 @@ class AntigravityCollector:
         if is_antigravity_token_fresh(stored):
             return stored
         if not is_antigravity_refreshable(stored):
-            if stored.source == "keyring" and ctx.antigravity_renewal and self._renewal.can_renew(stored.auth_method):
+            if stored.source == "keyring" and instance["renewSignIn"] and self._renewal.can_renew(stored.auth_method):
                 return await self._renewed(instance, ctx, stored)
             raise _auth_expired(stored)
         try:

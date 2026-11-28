@@ -10,8 +10,9 @@ import {credentialLabel} from '../core/accountText.js';
 import {formatText} from '../core/i18n.js';
 import {displayPath, expandPath} from '../core/paths.js';
 import {providerMetadata} from '../core/providerMetadata.js';
+import {canRenewSignIn} from '../core/signIn.js';
 import {topBarSummary} from '../core/topBar.js';
-import {ACCENTS, type AccentColor, type AccountApp, type ProviderInstance} from '../core/types.js';
+import {ACCENTS, type AccentColor, type AccountApp, type ProviderInstance, type ProviderKind} from '../core/types.js';
 import type {PrefsContext} from './context.js';
 import {TRANSLATOR} from './translator.js';
 import {accentName, markField, presentKeyError, setAccessibleLabel} from './widgets.js';
@@ -37,6 +38,15 @@ const APP_NAMES: Record<AccountApp, string> = {
 // Apps whose sign-in is a file in the account home, so the home and file can be changed.
 const FILE_APPS: AccountApp[] = ['codex-cli', 'claude-code', 'kiro-cli', 'antigravity', 'github-cli', 'claude-settings', 'kimi-cli', 'cursor', 'cursor-agent'];
 
+// What the service starts for an expired sign-in of this account, when the switch is on.
+function renewalSubtitle(kind: ProviderKind): string {
+    if (kind === 'claude')
+        return _('When the sign-in has expired, the service runs claude auth status so Claude Code renews it');
+    if (kind === 'codex')
+        return _('When the sign-in has expired, the service starts the Codex app server so Codex renews it');
+    return _('When the agy sign-in has expired, the service starts agy so it renews the sign-in');
+}
+
 function hexFromRgba(rgba: Gdk.RGBA): `#${string}` {
     const channel = (value: number) => Math.round(value * 255).toString(16).padStart(2, '0');
     return `#${channel(rgba.red)}${channel(rgba.green)}${channel(rgba.blue)}`;
@@ -61,6 +71,7 @@ export class AccountPage extends Adw.NavigationPage {
     private readonly _swatches = new Map<AccentColor, Gtk.ToggleButton>();
     private readonly _custom: Gtk.ColorDialogButton;
     private readonly _topBar: Adw.ActionRow;
+    private _renew: Adw.SwitchRow | null = null;
     private _provider: ProviderInstance;
     private _unwatch: (() => void) | null;
 
@@ -113,6 +124,20 @@ export class AccountPage extends Adw.NavigationPage {
             pace.connect('notify::active', () => this._apply({showPace: pace.active}));
             main.add(pace);
         }
+        if (canRenewSignIn(provider)) {
+            const renew = new Adw.SwitchRow({
+                title: _('Renew Expired Sign-In'),
+                subtitle: renewalSubtitle(provider.kind),
+                active: provider.renewSignIn,
+            });
+            // The popup changes the same switch; following it here must not send the value back.
+            renew.connect('notify::active', () => {
+                if (renew.active !== this._provider.renewSignIn)
+                    this._apply({renewSignIn: renew.active});
+            });
+            main.add(renew);
+            this._renew = renew;
+        }
         page.add(main);
 
         const colors = new Adw.PreferencesGroup({title: _('Color')});
@@ -136,13 +161,15 @@ export class AccountPage extends Adw.NavigationPage {
         this._unwatch = null;
     }
 
-    // The popup can change the top-bar choice while this page is open.
+    // The popup can change the top-bar choice and the renewal switch while this page is open.
     private _onStoredChanged(): void {
         const stored = this._context.accounts.find(item => item.id === this._provider.id);
         if (!stored)
             return;
         this._provider = stored;
         this._topBar.subtitle = this._topBarText();
+        if (this._renew)
+            this._renew.active = stored.renewSignIn;
     }
 
     private _topBarText(): string {

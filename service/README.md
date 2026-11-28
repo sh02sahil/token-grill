@@ -65,30 +65,26 @@ The service reads the credentials that the tools of each service stored on this
 computer, read-only. It never unlocks a keyring, and it never uses a Codex or
 a Claude refresh token itself.
 
-The setting `claudeRenewal` is off by default. Turn it on in the extension
-Preferences: **Renew Expired Claude Code Sign-Ins** (General, Updates). Then,
-for an expired Claude Code sign-in, the service runs the installed
-`claude auth status` with `CLAUDE_CONFIG_DIR` set to the folder of the
-account. Claude Code renews the sign-in and writes its own file. The service
-discards the output, stops the command after 30 seconds, and reads the file
-again. After a failure, the next attempt for that file waits 5 minutes, and
-the wait doubles after each further failure, up to 1 hour.
+The account field `renewSignIn` is off by default. Turn it on for an account
+in the extension: **Renew Expired Sign-In**, in the account's preferences or in
+the popup. It applies to Claude Code, Codex CLI, and agy accounts. When the
+sign-in of such an account has expired, the service starts the installed CLI of
+the account, and the CLI renews and saves its own sign-in:
 
-The setting `antigravityRenewal` is off by default. Turn it on in the
-extension Preferences: **Renew Expired Antigravity Sign-Ins** (General,
-Updates). Then, for an expired agy sign-in in the keyring, the service starts
-the installed `agy acp` without a display and sends the Agent Client Protocol
-requests `initialize` and `authenticate`. agy renews the sign-in and saves it
-in the keyring, and the service reads it again. It stops agy after 30 seconds,
-with the same waits after a failure.
+- Claude Code: `claude auth status`, with `CLAUDE_CONFIG_DIR` set to the
+  folder of the credentials file. The service discards the output.
+- Codex: `codex app-server`, with `CODEX_HOME` set to the folder of the
+  `auth.json` file. The service sends the requests `initialize` and
+  `account/read` with `refreshToken`.
+- agy: `agy acp`, without a display. The service sends the Agent Client
+  Protocol requests `initialize` and `authenticate`, and agy saves the sign-in
+  in the keyring.
 
-The setting `codexRenewal` is off by default. Turn it on in the extension
-Preferences: **Renew Expired Codex Sign-Ins** (General, Updates). Then, for an
-expired Codex CLI sign-in, the service starts the installed `codex app-server`
-with `CODEX_HOME` set to the folder of the `auth.json` file and sends the
-requests `initialize` and `account/read` with `refreshToken`. Codex renews the
-sign-in and writes its own file, and the service reads it again. It stops
-Codex after 30 seconds, with the same waits after a failure.
+The service stops the CLI after 30 seconds and reads the sign-in again. After
+a failure, the next attempt for that sign-in waits 5 minutes, and the wait
+doubles after each further failure, up to 1 hour. A config file of service
+0.1.3 with the setting `claudeRenewal` turned on turns the switch on for each
+Claude Code account.
 
 The service's HTTP client sends a credential only to its own service, over HTTPS,
 with no redirects, and only to the hosts in the table in the

@@ -235,7 +235,7 @@ def test_records_without_usage_or_a_timestamp_are_ignored() -> None:
 # --- auth and collector
 
 
-def make_instance(home: Path, live: bool = True) -> ProviderInstance:
+def make_instance(home: Path, live: bool = True, renew: bool = False) -> ProviderInstance:
     return {
         "schemaVersion": 2,
         "id": "acct",
@@ -253,6 +253,7 @@ def make_instance(home: Path, live: bool = True) -> ProviderInstance:
         "topBar": {"automatic": True, "limits": []},
         "lowBalance": None,
         "showPace": True,
+        "renewSignIn": renew,
     }
 
 
@@ -449,7 +450,7 @@ def _write_expired(home: Path, refresh: str | None = "old") -> None:
     (home / "auth.json").write_text(json.dumps({"tokens": tokens}))
 
 
-def _renewal_ctx(tmp_path: Path, seen: list[httpx.Request], *, renewal: bool) -> tuple[CollectorContext, list[str]]:
+def _renewal_ctx(tmp_path: Path, seen: list[httpx.Request]) -> tuple[CollectorContext, list[str]]:
     steps: list[str] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -463,7 +464,6 @@ def _renewal_ctx(tmp_path: Path, seen: list[httpx.Request], *, renewal: bool) ->
         checkpoints=CheckpointStore(tmp_path / "cp.json"),
         balances=BalanceStore(tmp_path / "balances.json"),
         on_record=lambda step, detail: steps.append(f"{step}: {detail}"),
-        codex_renewal=renewal,
     )
     return ctx, steps
 
@@ -474,8 +474,8 @@ async def test_codex_renews_an_expired_sign_in_when_the_user_turned_it_on(
     log = _install_fake_codex(tmp_path, monkeypatch)
     _write_expired(tmp_path / "home")
     seen: list[httpx.Request] = []
-    ctx, steps = _renewal_ctx(tmp_path, seen, renewal=True)
-    snap = await CodexCollector().collect(make_instance(tmp_path / "home"), empty_snapshot("acct"), ctx)
+    ctx, steps = _renewal_ctx(tmp_path, seen)
+    snap = await CodexCollector().collect(make_instance(tmp_path / "home", renew=True), empty_snapshot("acct"), ctx)
     assert snap["errorInfo"] is None
     calls = _codex_calls(log)
     # The account's own home, and no inherited API key that could select another sign-in.
@@ -489,7 +489,7 @@ async def test_codex_renews_an_expired_sign_in_when_the_user_turned_it_on(
 async def test_codex_is_not_started_when_renewal_is_off(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     log = _install_fake_codex(tmp_path, monkeypatch)
     _write_expired(tmp_path / "home")
-    ctx, _ = _renewal_ctx(tmp_path, [], renewal=False)
+    ctx, _ = _renewal_ctx(tmp_path, [])
     snap = await CodexCollector().collect(make_instance(tmp_path / "home"), empty_snapshot("acct"), ctx)
     assert snap["errorInfo"] is not None
     assert snap["errorInfo"]["messageId"] == "codex.auth-expired"
@@ -499,8 +499,8 @@ async def test_codex_is_not_started_when_renewal_is_off(tmp_path: Path, monkeypa
 async def test_codex_is_not_started_without_a_refresh_token(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     log = _install_fake_codex(tmp_path, monkeypatch)
     _write_expired(tmp_path / "home", refresh=None)
-    ctx, _ = _renewal_ctx(tmp_path, [], renewal=True)
-    snap = await CodexCollector().collect(make_instance(tmp_path / "home"), empty_snapshot("acct"), ctx)
+    ctx, _ = _renewal_ctx(tmp_path, [])
+    snap = await CodexCollector().collect(make_instance(tmp_path / "home", renew=True), empty_snapshot("acct"), ctx)
     assert snap["errorInfo"] is not None
     assert snap["errorInfo"]["code"] == "auth-expired"
     assert _codex_calls(log) == []
@@ -513,10 +513,10 @@ async def test_a_chosen_auth_file_with_another_name_is_not_renewed(
     _write_expired(tmp_path / "home")
     (tmp_path / "home" / "auth.json").rename(tmp_path / "home" / "work.json")
     instance: ProviderInstance = {
-        **make_instance(tmp_path / "home"),
+        **make_instance(tmp_path / "home", renew=True),
         "authFileOverride": str(tmp_path / "home" / "work.json"),
     }
-    ctx, _ = _renewal_ctx(tmp_path, [], renewal=True)
+    ctx, _ = _renewal_ctx(tmp_path, [])
     snap = await CodexCollector().collect(instance, empty_snapshot("acct"), ctx)
     assert snap["errorInfo"] is not None
     assert snap["errorInfo"]["code"] == "auth-expired"
@@ -531,8 +531,8 @@ async def test_a_failed_codex_renewal_waits_before_the_next_try(
     _write_expired(tmp_path / "home")
     collector = CodexCollector()
     for _ in range(2):
-        ctx, _ = _renewal_ctx(tmp_path, [], renewal=True)
-        snap = await collector.collect(make_instance(tmp_path / "home"), empty_snapshot("acct"), ctx)
+        ctx, _ = _renewal_ctx(tmp_path, [])
+        snap = await collector.collect(make_instance(tmp_path / "home", renew=True), empty_snapshot("acct"), ctx)
         assert snap["errorInfo"] is not None
         assert snap["errorInfo"]["code"] == "auth-expired"
     assert [call.get("method") for call in _codex_calls(log)].count("account/read") == 1
@@ -543,8 +543,8 @@ async def test_a_missing_codex_is_an_expired_sign_in(tmp_path: Path, monkeypatch
     monkeypatch.setenv("PATH", str(tmp_path / "empty"))
     monkeypatch.setattr(Path, "home", lambda: tmp_path / "nohome")
     _write_expired(tmp_path / "home")
-    ctx, steps = _renewal_ctx(tmp_path, [], renewal=True)
-    snap = await CodexCollector().collect(make_instance(tmp_path / "home"), empty_snapshot("acct"), ctx)
+    ctx, steps = _renewal_ctx(tmp_path, [])
+    snap = await CodexCollector().collect(make_instance(tmp_path / "home", renew=True), empty_snapshot("acct"), ctx)
     assert snap["errorInfo"] is not None
     assert snap["errorInfo"]["code"] == "auth-expired"
     assert [step for step in steps if step.startswith("sign-in")] == ["sign-in: Codex could not start"]

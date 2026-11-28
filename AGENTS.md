@@ -242,16 +242,16 @@ Rules for the service (network and data):
 
 - Do not refresh a token whose refresh token is single-use (Codex, Claude):
   the CLI keeps the old one, so a refresh by Token Grill signs the CLI out.
-  Only if the user turned on `claudeRenewal`, the service runs
-  `claude auth status` for an expired Claude Code sign-in and reads the file
-  again, and only if the user turned on `codexRenewal`, the service starts
-  `codex app-server` and asks it for the account with `refreshToken` (SV-5).
+  Only for an account whose switch `renewSignIn` the user turned on, the
+  service runs `claude auth status` for an expired Claude Code sign-in, or
+  starts `codex app-server` and asks it for the account with `refreshToken`,
+  and reads the file again (SV-5).
   Do not refresh a Kiro token either: AWS SSO-OIDC replaces
   the refresh token, and kiro-cli deletes its sign-in when its own refresh is
   then rejected. Antigravity (Google) tokens can be refreshed in memory. The
-  agy keyring token has no client that Token Grill can use: only if the user
-  turned on `antigravityRenewal`, the service starts `agy acp` and asks it to
-  authenticate (SV-5).
+  agy keyring token has no client that Token Grill can use: only for an
+  account whose `renewSignIn` is on, the service starts `agy acp` and asks it
+  to authenticate (SV-5).
 
 - Usage pace needs `UsageWindow.durationSeconds`. Take it from what the
   service reports: a duration field (Codex), the window's own name, such as
@@ -338,9 +338,9 @@ same.
   command (X-3, X-4).
 
 - **The service runs `claude auth status` for an expired Claude Code
-  sign-in.** It does this only if the user turned on the setting
-  `claudeRenewal` ("Renew Expired Claude Code Sign-Ins" in Preferences). It is
-  off by default. Claude Code renews the token and writes its own file, so the
+  sign-in.** It does this only for an account whose switch `renewSignIn`
+  ("Renew Expired Sign-In", in the account's preferences and in the popup) the
+  user turned on. It is off by default. Claude Code renews the token and writes its own file, so the
   single-use refresh token stays with the CLI and the CLI stays signed in. The
   argv is fixed (`providers/claude/renewal.py`), no shell parses it, the output
   is discarded, and the command stops after 30 s or on cancellation. One
@@ -348,8 +348,8 @@ same.
   longer, from 5 minutes up to 1 hour (SV-3, SV-5).
 
 - **The service starts `agy acp` for an expired agy sign-in.** It does this
-  only if the user turned on the setting `antigravityRenewal` ("Renew Expired
-  Antigravity Sign-Ins" in Preferences). It is off by default. agy keeps its
+  only for an account whose switch `renewSignIn` the user turned on. It is off
+  by default. agy keeps its
   Google token in the keyring without an OAuth client that Token Grill could
   use, so only agy can renew it. The service sends the two Agent Client
   Protocol requests `initialize` and `authenticate`, with no prompt and no
@@ -361,8 +361,8 @@ same.
   is renewed, through the method `oauth-personal`; others stay expired.
 
 - **The service starts `codex app-server` for an expired Codex CLI sign-in.**
-  It does this only if the user turned on the setting `codexRenewal` ("Renew
-  Expired Codex Sign-Ins" in Preferences). It is off by default. The Codex
+  It does this only for an account whose switch `renewSignIn` the user turned
+  on. It is off by default. The Codex
   refresh token is single-use, so only Codex may spend it. The service sends
   the requests `initialize` and `account/read` with `refreshToken`
   (`providers/codex/renewal.py`). Codex renews the sign-in and writes its own
